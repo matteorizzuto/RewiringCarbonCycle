@@ -23,10 +23,12 @@ Information on the versions of R and of the packages used is provided in both ve
 
 To reproduce our model analyses, please run all code chunks or knit the R notebook. Please note that the R notebook requires the following folder structure to work:
 
+```bash
 ../
 ├── Code
 ├── Data
 └── Results
+```
 
 Any change to the structure of the folder needs to be reflected in the relative paths used throughout the R notebook. A simple search for “../“ should suffice to find all instances in which relative paths are used and to update them as needed.
 
