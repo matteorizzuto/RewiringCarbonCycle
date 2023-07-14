@@ -1,0 +1,3804 @@
+---
+title: "Supporting Code"
+description: |
+  "for _Rewiring the carbon cycle: a theoretical framework for animal-driven ecosystem carbon sequestration_"
+author:
+  - first_name: "Matteo" 
+    last_name: "Rizzuto" 
+    url: https://matteorizzuto.github.io
+    affiliation: School of the Environment, Yale University
+    affiliation_url: https://environment.yale.edu
+    orcid_id: https://orcid.org/0000-0003-3065-9140
+  - first_name: "Shawn J." 
+    last_name: "Leroux" 
+    url: https://shawnleroux.wixsite.com/lerouxlab
+    affiliation: Department of Biology, Memorial University of Newfoundland
+    affiliation_url: https://mun.ca/biology
+    orcid_id: https://orcid.org/0000-0001-9580-0294  
+  - first_name: "Oswald J." 
+    last_name: "Schmitz" 
+    url: http://schmitz.environment.yale.edu
+    affiliation: School of the Environment, Yale University
+    affiliation_url: https://environment.yale.edu
+    orcid_id: https://orcid.org/0000-0003-1515-2667    
+date: "`r Sys.Date()`"
+output: 
+  distill::distill_article:
+    toc: true
+    toc_depth: 2
+    code_folding: true
+    self_contained: true
+    highlight_downlit: true
+    creative_commons: CC BY-SA
+    fig.retina: 3
+bibliography: Bibliography.bib
+---
+
+```{r setup, echo=TRUE, tidy=TRUE}
+# Notebook setup
+
+# note: this notebooks uses package "downlit" in the YAML 
+# options to provide contextual linking of functions called in
+# code chunk to their online documentation on https://rdrr.io
+# a short description precedes each package 
+
+# To keep track of pkgs used & their version uncomment the following two lines
+# library("renv")
+# snapshot()
+
+# package loading
+
+# collection of pkgs, including ggplot2, dplyr, forcats, etc, for cleaner code
+library("tidyverse")
+# latin hypercube sampling
+library("lhs")
+# additional geoms for ggplot2 to plot half-geoms 
+library("gghalves") 
+# color palette collection, based on art masterpieces stored at the MET
+library("MetBrewer")
+# easy table creation
+library("gt")
+# data summary table creation
+library("gtsummary")
+# easily combine multiple ggplot2 object
+library("patchwork")
+# access to more markdown functions
+library("rmarkdown")
+# utilities
+library("utils")
+# extra utilities for ggplot2
+library("ggh4x")
+# extra themes and functions for ggplot2
+library("cowplot")
+# file system operations
+library("fs")
+# fit randomForest models as part of a global sensitivity analysis
+library("randomForest")
+# save ggplot2 objects as .svg or .eps
+library("svglite")
+
+# set the theme for all ggplot2 objects
+theme_set(theme_classic())
+
+# set width and height for 16:9 graphs
+width <- 10
+height <- (9/16)*width
+
+# palette for colors in patchwork graphs
+palt <- met.brewer("Egypt", 2, "discrete")
+
+
+# formula to print scientific notation as "10^" instead of "e+", from:
+# https://stackoverflow.com/a/24241954
+
+fancy_scientific <- function(l) {
+     # turn in to character string in scientific notation
+     l <- format(l, scientific = TRUE)
+     # to 0 show up as 0
+     l <- gsub("0e\\+00", "0", l)
+     # quote the part before the exponent to keep all the digits
+     l <- gsub("^(.*)e", "'\\1'e", l)
+     # turn the 'e+' into plotmath format
+     l <- gsub("e", "%*%10^", l)
+     # return this as an expression
+     parse(text=l)
+}
+```
+
+# Introduction
+
+In this notebook, we describe the numerical analyses of a model that investigates and quantifies the influence of animals---here,
+herbivores---on ecosystem carbon cycling [@Schmitz2014;@Schmitz2018;@Schmitz2023]. We use an 
+ecosystem model with three trophic compartments---an inorganic resources pool, a 
+primary producer, and an animal consumer---and we track the flow of two elemental 
+currencies in the ecosystem: carbon (C) and nitrogen (N) [@Leroux2015]. We focus on these two 
+currencies because they
+
+  * share a strong stoichiometric relationship captured by the C:N ratio which 
+  describes the stoichiometry of an individual or trophic/functional group and 
+  allows for tracking both C and N,
+  * are fundamental actors in climate change models, and
+  * are routinely measured in organisms as part of empirical studies.
+
+Initial work investigating the dynamics of this model to derive equilibria and feasibility conditions took place in Mathematica [@Mathematica2022]. Further details can be found in the Mathematica notebook provided as part of this same repository. 
+
+This notebook is structure in sections, which can be navigated using the table of contents on the left. In section [Numerical analyses], we fit randomly-drawn parameter sets to two 
+versions of the model---one _with_ and one _without_ herbivores. The parameter sets
+we use are assembled using a latin hypercube sampling design [@lhs2022], scaled to match 
+empirical and theoretical constraints on the range of values of each parameter. 
+
+Section [Global Sensitivity Analysis] runs an analysis of each parameter's importance within the model, following the framework proposed by @Harper2011 and @Bellmore2014.
+
+The [Ecosystem function analyses] section details our analyses of the impacts 
+herbivores can have on three key ecosystem functions---plant biomass 
+accumulation, primary production, and net ecosystem carbon balance.
+
+In section [Visual deliverables], we produce graphs to investigate and interpret
+the results of model runs performed in section [Numerical Analyses]. A first set
+of graphs ([Herbivore influences on soil, plants C and N content]) investigates
+how herbivore _presence_ and _absence_ influence the dynamics of C and N cycling
+in the ecosystem. Following these initial graphs, in section 
+[Relative Parameter Importance] we present graphs of the results from the GSA. 
+Section [Herbivore influence on ecosystem functions] graphically investigates the effects of herbivore _presence_ and _absence_ on the three ecosystem functions of interest. Finally, the [Publication figures] section provides code to reproduce the figures shown in the manuscript.
+
+#### Analyses setup
+
+We compiled this notebook on a machine using the following version of 
+R, operative system, and necessary packages:
+
+```{r session-information, echo=FALSE}
+utils:::print.sessionInfo(sessionInfo()[-8])
+```
+
+Furthermore, this notebook is designed to use this folder structure:
+
+```{r dir-tree, echo=TRUE, tidy=TRUE}
+dir_tree(path = "../", recurse = 0 , all = FALSE, type = "directory")
+```
+
+This directory structure allows for using relative paths in loading and saving 
+objects in the R environment. Please, make sure to replicate it before attempting to compile this notebook from scratch.
+
+# Numerical analyses
+
+Here, we perform numerical analyses of the stability and dynamics of the 
+equilibria found for the _herbivore_ and _non-herbivore_ versions of our model 
+tracking both carbon (C) and nitrogen (N) in an ecosystem. We use the single equilibrium were all state variables are feasible (i.e., 
+_> 0_), as derived in Mathematica [@Mathematica2022].
+
+We begin by producing 10000 sets of randomly-drawn values for the model's 
+parameters, to use in fitting the model. The parameters can be grouped into 
+three main categories:
+
+* random parameters, including _I_, _a~P~_, _a~H~_, _r~P~_, _r~H~_, _q~S~_, _π_ and _δ_
+* C:N ratio parameters, including _α_ and _β_
+* fixed parameters, currently only _k_
+
+We separate the C:N ratio parameters because, unlike the other parameters, their 
+random draw is constrained within a certain range of values informed by 
+empirical data reported in the literature [@Buchkowski2019]. Note 
+also that parameters _π_ and _δ_ are scaled $\in$ [0, 1] as they are 
+proportions (see **Table A.1** in Appendix A.1). The only fixed parameter is the
+nutrient loss rate from the soil compartment, _k_.
+
+First, we set a value of 0.5 for parameter _k_, the loss rate of N from the Soil 
+compartment, based on previous studies [@Leroux2012].
+
+```{r k-value, echo=TRUE,tidy=TRUE}
+# parameter k will remain the same throughout analyses
+k <- 0.5
+```
+
+Next, the following code chunk reads parameter values from the `.csv` files provided in folder `.../Data/`.
+
+```{r data-load, echo=TRUE, tidy=TRUE}
+# random parameter values for parameters scaled 0--10 
+pDATA1 <- read.csv("../Data/pDATA1.csv", header = T, sep = ",")
+# random parameter values for parameters scaled 0--1
+pDATA2 <- read.csv("../Data/pDATA2.csv", header = T, sep = ",")
+# random parameter values for C:N parameters
+cnDATA <- read.csv("../Data/cnDATA.csv", header = T, sep = ",")
+```
+
+Alternatively, parameter values can be generate anew by setting chunk option `eval=TRUE` for the following two code chunks. 
+
+This first code chunk uses a latin hypercube sampling design [@lhs2022] to 
+randomly draw values for parameters _I_, _a~P~_, _a~H~_, _r~P~_, _r~H~_, _q~S~_, 
+scaling them $\in$ [0, 10]. Then, we will draw random values for parameters _π_ 
+and _δ_ and scale them $\in$ [0, 1].
+
+```{r param-value-gen, eval=FALSE, echo=TRUE, tidy=TRUE}
+# use a latin hypercube (lhs) to generate random data to fit the model
+# lhs has 100 bins
+# stack bins together to produce 10k data for the model
+# we have 5 parameters scaled 0-10 in the model, so lhs has 5 columns
+
+# NOTE: this excludes C:N ratio data, see below
+
+# allocate empty object to store parameter values
+pDATA1 <- NULL
+
+# use a loop to create 10k parameter values
+for (i in seq(1, 100, 1)) {
+  # create random latin hypercube
+  pLHS <- randomLHS(100, 6)  
+  # stack lhs results together
+  pDATA1 <- rbind(pDATA1, data.frame(i=i, Result=pLHS*10))
+  # print i to keep track of progress
+  # print(i)
+  # remove pLHS object 
+  rm(pLHS)
+}
+
+write.csv(pDATA1, file = "../Data/pDATA1.csv", row.names = FALSE)
+
+# Now, repeat for the 2 parameters scaled 0-1
+
+# allocate empty object to store parameter values
+pDATA2 <- NULL
+
+# use a loop to create 10k parameter values
+for (i in seq(1, 100, 1)) {
+  # create random latin hypercube
+  pLHS <- randomLHS(100, 2)  
+  # stack lhs results together
+  pDATA2 <- rbind(pDATA2, data.frame(i=i, Result=pLHS))
+  # print i to keep track of progress
+  # print(i) 
+  # remove pLHS object 
+  rm(pLHS)
+}
+
+write.csv(pDATA2, file = "../Data/pDATA2.csv", row.names = FALSE)
+```
+
+The next code chunk randomly draws values for parameters _α_ and _β_, the C:N 
+parameters for plants and herbivores, respectively. After using the latin 
+hypercube, we will transform its margins to rescale the randomly-drawn values to 
+be $\in$ [5, 150] for plants and $\in$ [3, 10] for herbivores [@Buchkowski2019]. 
+The code to perform this rescaling comes from the [`lhs_basics` vignette](https://cran.r-project.org/web/packages/lhs/vignettes/lhs_basics.html) [@lhs2022].
+
+```{r cn-value-gen, eval=FALSE, echo=TRUE,tidy=TRUE}
+# to produce random values for C:N ratio of plants and animals we use lhs again
+# but after creating the lhs, we will transform its margins to constrain
+# the distribution of values within the C:N ranges reported in the literature
+
+# code taken from https://cran.r-project.org/web/packages/lhs/vignettes/lhs_basics.html
+
+# allocate empty dataframe
+cnDATA <- NULL
+
+# create the lhs, only 2 bins because we only have 2 C:N parameters in the model
+for (i in seq(1, 100, 1)) {
+  # create the LHS containing random values for 2 C:N parameters
+  cnLHSa <- randomLHS(100, 2)
+  # not, create a matrix w/ same dimensions that will contain the rescaled values
+  cnLHSb <- matrix(nrow = nrow(cnLHSa), ncol = ncol(cnLHSa))
+  # rescale values for plants C:N, range 5-150
+  cnLHSb[, 1] <- qunif(cnLHSa[, 1], min = 5, max = 150)
+  # rescale values for animals C:N, range 3-10
+  cnLHSb[, 2] <- qunif(cnLHSa[, 2], min = 3, max = 10)
+  # rbind the matrix into a dataframe w/ 3 columns
+  cnDATA <- rbind(cnDATA, data.frame(i = i, 
+                                     Plants = cnLHSb[,1], 
+                                     Animals = cnLHSb[,2]))
+  # print i to keep track of progress
+  # print(i)
+}
+
+write.csv(cnDATA, file = "../Data/cnDATA.csv", row.names = FALSE)
+```
+
+## Fitting the herbivore model
+
+We begin by fitting the herbivore model, using its only feasible equilibrium. 
+This equilibrium is described by the following set of equations 
+(see the **manuscript** for more details and for the model's full system of 
+equations):
+
+$$
+  S^*_N = \frac{I}{k}
+$$
+$$
+  S^*_C = \frac{kr_{H}r_{P}\left(\alpha (1 - \delta) + \left(\pi - 1\right)\beta\right)}{I(a_{H}q_{S}+a_{P}\left(\pi - 1\right)\beta r_{H})}
+$$
+$$
+  P^*_N = \frac{r_H}{a_H}
+$$
+$$
+  H^*_N = −\frac{r_P\left(a_{H}q_{S}+a_{P}r_{H}\alpha\left(\delta - 1\right)\right)}{a_{H}\left(a_{H}q_{S}+a_{P}\left(\pi - 1\right)\beta r_{H}\right)}
+$$
+
+<aside>
+Note that, because of the C:N ratio of plants and herbivores, 
+$$
+P^*_C = \alpha \cdot P^*_N
+$$
+and
+$$
+H^*_C = \beta \cdot H^*_N
+$$
+See the **manuscript** for more details.
+</aside>
+
+In the following code chunks, we will use a `for` loop with nested `if` statements
+to run the model for 10000 times. Before fitting the model, we allocate an empty 
+dataset to store the resulting stocks and parameters values.
+
+```{r herb-mod-random-I-setup, echo=TRUE, tidy=TRUE}
+hRESrandomI <- NULL
+
+hRESrandomI <- rbind(hRESrandomI, 
+                   data.frame(TIME = seq(1, 100, 1), 
+                              I = seq(1, 100, 1), 
+                              k = seq(1, 100, 1), 
+                              Soil_N = seq(1, 100, 1), 
+                              Soil_C = seq(1, 100, 1), 
+                              Plant_N = seq(1, 100, 1), 
+                              Herbivore_N = seq(1, 100, 1),  
+                              α = seq(1, 100, 1), β = seq(1, 100, 1), 
+                              π = seq(1, 100, 1), δ = seq(1, 100, 1), 
+                              ap = seq(1, 100, 1), ah = seq(1, 100, 1), 
+                              rp = seq(1, 100, 1), rh = seq(1, 100, 1), 
+                              q = seq(1, 100, 1)))
+```
+
+Below, we run the loop. At each time step, the `if` statement checks the 
+feasibility conditions and, if these are satisfied, calculates and store the 
+state variables' values and the corresponding parameter set in the i-th row of 
+`hRESrandomI`. Note that the conditions for the `if` statement are the 
+feasibility conditions of the only feasible equilibrium found in Mathematica 
+[@Mathematica2022]. 
+
+When $\alpha > 0$, $\beta > 0$, $a_H > 0$, $a_P > 0$, 
+$I > 0$, $k > 0$, $r_H > 0$, $r_P > 0$, then the equilibrium stated above is 
+feasible when,
+
+* $0 < \pi < 1$, and either 
+    + $a_{H} (a_{H} q_{S} + a_{P} (\pi − 1)r_{H} \beta) < 0$ and either
+        - $\delta \geq 1$, and $q_S > 0$ 
+        - $\beta > \frac{\alpha(\delta − 1)}{(\pi − 1)}$, $a_{H} (a_{H} q_{S} + a_{P} r_{H} \alpha(\delta − 1)) > 0$, $0 < \delta < 1$, or when
+    + $0 < \delta < 1$, $\beta < \frac{\alpha (\delta − 1)}{(\pi − 1)}$, $a_{H} (a_{H} q_{S} + a_{P} r_{H} \alpha(\delta − 1)) < 0$, and $a_{H} (a_{H} q_{S} + a_{P} (\pi − 1)r_{H} \beta) > 0$, or when
+ * $\pi \geq 1$, $q_{S} > 0$, $0 < \delta < 1$, and $a_{H} (a_{H} q_{S} + a_{P} r_{H} \alpha(\delta − 1)) < 0$
+
+```{r herb-mod-random-I-run, echo=TRUE, tidy=TRUE}
+# we want to start the loop at 0, so we create a custom index object
+i1 <- 0
+
+# this loop fits the model using parameter values from the pDATA1, pDATA2 and 
+# cnDATA objects created above
+for (i in seq(0, 9999, 1)) {
+  # take one step forward in time
+  i1 <- i1 + 1
+  
+  # sample parameters from the data objects created above
+  # N mineralization rate
+  ap <- pDATA1[i1, 2]
+  # Herbivore nutrition rate
+  ah <- pDATA1[i1, 3]
+  # N recycling rates
+  rp <- pDATA1[i1, 4]
+  rh <- pDATA1[i1, 5]
+  # C loss rate from inorganic soil pool
+  q <- pDATA1[i1, 6]
+  # inorganic nutrient input to soil compartment
+  I <- pDATA1[i1, 7]
+  # proportion of plant C that is respired
+  δ <- pDATA2[i1, 2]
+  # proportion of herbivore C that is respired
+  π <- pDATA2[i1, 3]
+  # C:N ratio of plants
+  α <- cnDATA[i1, 2]
+  # C:N ratio of herbivores
+  β <- cnDATA[i1, 3]
+  
+  # check the feasibility conditions 
+  if (α>0 & ah>0 & ap>0 & I>0 & k>0 & rh>0 & rp>0 & 
+      ((π>0 & π<1 & 
+        ((ah*(ah*q+ap*(π-1)*rh*β)<0 & 
+          ((β>0 & δ>=1 & q>0) | # δ>=1 cannot be! how to address this?
+           (β>(α*(δ-1))/(π-1) & ah*(ah*q+ap*rh*α*(δ-1))>0 & δ>0 & δ<1))) | 
+         (β>0 & δ>0 & β<(α*(δ-1))/(π-1) & 
+          ah*(ah*q+ap*rh*α*(δ-1))<0 & δ<1 & 
+          ah*(ah*q+ap*(π-1)*rh*β)>0))) | 
+       (β>0 & π>=1& q>0 & δ>0 & ah*(ah*q+ap*rh*α*(δ-1))<0 & δ<1))) # π>=1 cannot be! how to address this? theoretically, this conditions should never realized as we set the value of π to be within [0, 1], so R should automatically discard it
+    { # if the feasibility conditions are satisfied, the i1-th row of hRESmidI gets
+      # the values of each parameter and the results from solving the equilibrium
+      # equations for each state variable
+      hRESrandomI[i1, ] <- c(i1, I, k, 
+                            # soil N
+                            (I/k), 
+                            # soil C
+                            (k*rh*rp*(α+(-1+π)*β-α*δ))/(ah*I*q+ap*I*(-1+π)*rh*β),
+                            # plant N
+                            (rh/ah),
+                            # herbivore N
+                            (-((rp*(ah*q+ap*rh*α*(-1+δ)))/(ah*(ah*q+ap*(-1+π)*rh*β)))),
+                            α, β, π, δ, ap, ah, rp, rh, q)} 
+  else  
+    { # if the feasibility conditions are not satisfied, the i1-th of hRESrandomI gets
+      # the values of each parameter and 0 for all state variables
+      hRESrandomI[i1, ] <- c(i1, I, k, 0, 0, 0, 0, α, β, π, δ, ap, ah, rp, rh, q)}
+  
+  # browser()  
+}
+
+hRESrandomI <- hRESrandomI %>% mutate(., biosense = ifelse(Soil_N > 0 &
+                                                             Soil_C > 0 &
+                                                             Plant_N > 0 &
+                                                             Herbivore_N > 0,
+                                                           "yes",
+                                                           "no"),
+                                      .after = q) %>%
+  mutate_at(vars(biosense), factor)
+```
+
+As noted above, the stocks of C in the plant and herbivore compartments at 
+equilibrium are simply the result of multiplying the plant and herbivore stocks 
+of N by _α_ and _β_, respectively. The following chunk of code does this 
+and then uses function `filter` from package `dplyr` to remove model runs for 
+which state variables stocks are _= 0_. Following this, the code chunk calculates 
+total and standardized values of C and N content in each trophic compartment and 
+for the ecosystem as a whole. We store the remaining parameter sets and new 
+standardized values in object `hRESrandomI_pos`, where `_pos` stands for 
+_positive_, for later use. 
+
+```{r herb-mod-random-I-add-state-var, echo=TRUE, tidy=TRUE}
+hRESrandomI_pos <- hRESrandomI %>% 
+  mutate(., Plant_C = α*Plant_N, .after = Plant_N) %>% 
+  mutate(., Herbivore_C = β*Herbivore_N, .after = Herbivore_N) %>% 
+  dplyr::filter(., Soil_N > 0 & 
+           Soil_C > 0 & 
+           Plant_N > 0 & 
+           Plant_C > 0 & 
+           Herbivore_N > 0 & 
+           Herbivore_C > 0) %>%
+   # this mutate call standardizes each compartment's C or N content
+   # to the total C or N content of the system
+  mutate(., Total_Soil = (Soil_N + Soil_C),
+         Total_Plant = (Plant_N + Plant_C),
+         Total_Herbivore = (Herbivore_N + Herbivore_C),
+         Total_N = (Soil_N + Plant_N + Herbivore_N), 
+         Total_C = (Soil_C + Plant_C + Herbivore_C), 
+         Soil_Nstd = Soil_N/Total_N, 
+         Plant_Nstd = Plant_N/Total_N,
+         Herbivore_Nstd = Herbivore_N/Total_N, 
+         Soil_Cstd = Soil_C/Total_C, 
+         Plant_Cstd = Plant_C/Total_C, 
+         Herbivore_Cstd = Herbivore_C/Total_C) 
+
+paged_table(hRESrandomI_pos)
+```
+
+After removing the parameter sets that produce state variables _= 0_, we are left 
+with **`r prettyNum(nrow(hRESrandomI_pos))`** parameter sets that yield feasible 
+and _> 0_ stock values for all state variables in the model. 
+
+## Fitting the non-herbivore model
+
+Here, we work on a version of the model that does not include a consumer trophic
+compartment (i.e., herbivores). As for [Fitting the herbivore model], here we 
+work with the single feasible equilibrium of the full model (see the 
+**manuscript** or Mathematica notebook for the full system of equations). This is 
+described by the following set of equations:
+
+<aside>
+Here, again,
+$$
+P^*_C = \alpha \cdot P^*_N
+$$
+and the model reduces to just three equations.
+</aside>
+$$
+  S^*_{N} = \frac{I}{k}
+$$
+$$
+  S^*_{C} = \frac{kr_{P}}{a_{P}I}
+$$
+$$
+  P^*_{N} = \frac{q_{S}}{a_{P}\alpha (1 - \delta)}
+$$
+
+As before, we will explore the behavior of this model using random values of 
+inorganic nutrient (N) inputs to the soil compartment (parameter _I_; $\in$ 
+[0, 10]). 
+
+In all model runs below, we will be using the same random parameter values used
+for the model _with_ herbivores and stored in objects `pDATA1`, `pDATA2`, and 
+`cnDATA`.
+
+As with the herbivore model (see [Fitting the herbivore model] above), we will 
+store results in an object labelled `nhRESrandomI`, where `nh` stands for 
+_non-herbivore_.
+
+First, we allocate a new, empty dataframe to store the results from these new 
+iterations of the model.
+
+```{r no-herb-mod-random-I-setup, echo=TRUE, tidy=TRUE}
+nhRESrandomI <- NULL
+
+nhRESrandomI <- rbind(nhRESrandomI, 
+                   data.frame(TIME = seq(1, 100, 1), 
+                              I = seq(1, 100, 1), 
+                              k = seq(1, 100, 1), 
+                              Soil_N = seq(1, 100, 1), 
+                              Soil_C = seq(1, 100, 1), 
+                              Plant_N = seq(1, 100, 1), 
+                              α = seq(1, 100, 1), δ = seq(1, 100, 1), 
+                              ap = seq(1, 100, 1), rp = seq(1, 100, 1), 
+                              q = seq(1, 100, 1)))
+```
+
+In running the model, we will once again check that the parameter values satisfy 
+the model's feasibility conditions. The _non-herbivore_ model is feasible when 
+$\alpha > 0$, $0 < \delta < 1$, $r_{P} > 0$, $q_{S} > 0$, $k > 0$, $I > 0$, and 
+$a_{P} > 0$.
+
+```{r no-herb-mod-random-I-run, echo=TRUE, tidy=TRUE}
+# we want to start the loop at 0, so we create a custom index object
+i1 <- 0
+
+# this loop fits the model using parameter values from the pDATA1, pDATA2 and cnDATA 
+# objects created above
+for (i in seq(0, 9999, 1)) {
+  # take one step forward in time
+  i1 <- i1 + 1
+  
+  # sample parameters from the data objects created above
+  # N mineralization rate
+  ap <- pDATA1[i1, 2]
+  # N recycling rates
+  rp <- pDATA1[i1, 4]
+  # C loss rate from inorganic soil pool
+  q <- pDATA1[i1, 6]
+  # inorganic nutrient input to soil compartment
+  I <- pDATA1[i1, 7]
+  # proportion of plant C that is respired
+  δ <- pDATA2[i1, 2]
+  # C:N ratio of plants
+  α <- cnDATA[i1, 2]
+  
+  # now, we use an if statement to check the feasibility condition of the 
+  # equilibrium we are analyzing and then run the model
+  if (α>0 & δ>0 & δ<1 & rp>0 & q>0 & k>0 & I>0 & ap>0) 
+    { # if the feasibility conditions are satisfied, the i1-th row of nhRESmidI gets
+      # the values of each parameter and the results from solving the equilibrium
+      # equations for each state variable
+    nhRESrandomI[i1, ] <- c(i1, I, k, 
+                         # soil N
+                         (I/k), 
+                         # soil C
+                         (k*rp)/(ap*I),
+                         # plant N
+                         q/(ap*α-ap*α*δ),
+                         α, δ, ap, rp, q)} 
+  else  
+    { # if the feasibility conditions are not satisfied, the i1-th of nhRESmidI gets
+      # the values of each parameter and 0 for all state variables
+      nhRESrandomI[i1, ] <- c(i1, I, k, 0, 0, 0, α, δ, ap, rp, q)}
+  
+  # browser()  
+}
+
+
+nhRESrandomI <- nhRESrandomI %>% mutate(., biosense = ifelse(Soil_N > 0 &
+                                                             Soil_C > 0 &
+                                                             Plant_N > 0,
+                                                           "yes",
+                                                           "no"),
+                                      .after = q) %>%
+  mutate_at(vars(biosense), factor)
+```
+
+Finally, we calculate the value of plant C stocks at equilibrium, remove all 
+sets of parameters yielding stock variable values _= 0_ at equilibrium, and then
+calculate total ecosystem C and N content and their standardized content for 
+each trophic compartment.
+
+```{r no-herb-mod-random-I-add-state-var, echo=TRUE, tidy=TRUE}
+nhRESrandomI_pos <- nhRESrandomI %>% 
+  mutate(., Plant_C = α*Plant_N, .after = Plant_N) %>% 
+  dplyr::filter(., Soil_N > 0 & 
+           Soil_C > 0 & 
+           Plant_N > 0 & 
+           Plant_C > 0) %>% 
+  # this mutate call standardizes each compartment's C or N content
+  # to the total C or N content of the system
+  mutate(., Total_Soil = (Soil_N + Soil_C),
+         Total_Plant = (Plant_N + Plant_C),
+         Total_N = (Soil_N + Plant_N), 
+         Total_C = (Soil_C + Plant_C), 
+         Soil_Nstd = Soil_N/Total_N, 
+         Plant_Nstd = Plant_N/Total_N, 
+         Soil_Cstd = Soil_C/Total_C, 
+         Plant_Cstd = Plant_C/Total_C) 
+
+paged_table(nhRESrandomI_pos)
+```
+
+Unlike what happened in [Fitting the herbivore model], here no parameter set 
+gets removed after checking if state variables are _= 0_ (n = 
+**`r prettyNum(nrow(nhRESrandomI_pos))`**). For consistency, we store these 
+parameter sets in a new object called `nhRESrandomI_pos`.
+
+Before proceeding further, we will combine the two dataframes containing the 
+results from running the model _with_ and _without_ herbivores into a single 
+object, `randomI`. We will use this object to run a [Global Sensitivity Analysis]
+and to produce all [Visual deliverables] below.
+
+we will also save `randomI` as a `.csv` file by the same name in the 
+`../Results/` folder, to use it in other notebooks. 
+
+```{r graph-setup, echo=TRUE, tidy=TRUE}
+# combine hRESrandomI_pos and nhRESrandomI_post into a single dataframe, 
+# identifying the rows from either original dataframe via the model version used,
+# with herbivores ("herbivore") and without herbivores ("absent")
+randomI <- dplyr::bind_rows("present" = hRESrandomI_pos, 
+                            "absent" = nhRESrandomI_pos, 
+                            .id = "herbivore")
+
+# write the new dataframe into a .csv file to use in other notebooks
+write.csv(randomI, file = "../Results/randomI.csv")
+```
+
+# Global Sensitivity Analysis
+
+Here, we run a Global Sensitivity Analysis (GSA; @Harper2011) to investigate the
+relative importance of each parameter in our model, estimated as the 
+parameter-specific residual sum of squared errors as calculated using a Random 
+Forest algorithm. While a local sensitivity analysis allows to vary a single 
+parameter over a range of values while keeping all others constant, a GSA varies
+all parameter at once [@Harper2011;@Bellmore2014]. In addition to remove the 
+need to arbitrarily select a constant value at which to keep all parameters not 
+being varied, a GSA also accounts for possible interactions among parameters 
+that would otherwise be lost in a local sensitivity analysis. Because of these 
+features, a GSA is particularly well-suited to investigate the mechanics of 
+complex mathematical models that rely on multiple parameters and may comprise 
+non-linear relationships among them [@Harper2011;@Bellmore2014].
+
+## Model with herbivores
+
+The code chunk below uses function `randomForest()` from the package of the same
+name to run the GSA. We run one GSA for each state variable (i.e., trophic 
+compartment) in the model, including only the parameters that appear in the 
+equilibrium equation of the state variable in question. For each GSA, the first 
+step is to use function `filter()` to limit our analyses to the results from the
+model _with_ herbivores. We then use function `select()` to choose the relevant 
+parameters, and the run the GSA. Using function `importance` from package `randomForest`, 
+we extract each parameter's residual sum of squared errors (SSE) value and store
+it in object with name ending in `_imp`. Using these dataframe, we calculate a 
+Relative Importance Index for each parameter as the ratio of its own residual 
+SSE to the sum total of residual SSE across all parameters in the model. Finally, 
+we combine each state variable's GSA results in a single dataframe, `herbGSA`.
+
+```{r compartment-wise-gsa-herbivore-model, echo=TRUE, tidy=TRUE}
+# Soil N
+SoilNgsa <- filter(randomI, herbivore == "present") %>%
+    select(., Soil_N, I, k)
+
+herbSoilN_rf <- SoilNgsa %>% randomForest(Soil_N ~., 
+                                data = .,
+                                proximity = TRUE,
+                                importance = TRUE)
+
+herbSoilN_imp <- as_tibble(importance(herbSoilN_rf), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+
+ranked_imp_herbSoilN <- tibble(herbSoilN_imp[, 3]/sum(herbSoilN_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(herbSoilN_imp$Parameter),
+           SV = "Soil_N") %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+
+# Soil C
+SoilCgsa <- filter(randomI, herbivore == "present") %>%
+    select(., Soil_C, I:k, α:q)
+
+herbSoilC_rf <- SoilCgsa %>% randomForest(Soil_C ~., 
+                                data = .,
+                                proximity = TRUE,
+                                importance = TRUE)
+
+herbSoilC_imp <- as_tibble(importance(herbSoilC_rf), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+
+ranked_imp_herbSoilC <- tibble(herbSoilC_imp[, 3]/sum(herbSoilC_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(herbSoilC_imp$Parameter),
+           SV = "Soil_C") %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+
+# Plant N
+PlantNgsa <- filter(randomI, herbivore == "present") %>%
+    select(., Plant_N, rh, ah)
+
+herbPlantN_rf <- PlantNgsa %>% randomForest(Plant_N ~., 
+                                data = .,
+                                proximity = TRUE,
+                                importance = TRUE)
+
+herbPlantN_imp <- as_tibble(importance(herbPlantN_rf), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+
+ranked_imp_herbPlantN <- tibble(herbPlantN_imp[, 3]/sum(herbPlantN_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(herbPlantN_imp$Parameter),
+           SV = "Plant_N") %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+
+# Plant C
+PlantCgsa <- filter(randomI, herbivore == "present") %>%
+    select(., Plant_C, α, rh, ah)
+
+herbPlantC_rf <- PlantCgsa %>% randomForest(Plant_C ~., 
+                                data = .,
+                                proximity = TRUE,
+                                importance = TRUE)
+
+herbPlantC_imp <- as_tibble(importance(herbPlantC_rf), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+
+ranked_imp_herbPlantC <- tibble(herbPlantC_imp[, 3]/sum(herbPlantC_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(herbPlantC_imp$Parameter),
+           SV = "Plant_C") %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+
+# Herbivore N
+HerbNgsa <- filter(randomI, herbivore == "present") %>%
+    select(., Herbivore_N, α:q)
+
+herbHerbN_rf <- HerbNgsa %>% randomForest(Herbivore_N ~., 
+                                data = .,
+                                proximity = TRUE,
+                                importance = TRUE)
+
+herbHerbN_imp <- as_tibble(importance(herbHerbN_rf), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+
+ranked_imp_herbHerbN <- tibble(herbHerbN_imp[, 3]/sum(herbHerbN_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(herbHerbN_imp$Parameter),
+           SV = "Herbivore_N") %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+
+# Herbivore C
+HerbCgsa <- filter(randomI, herbivore == "present") %>%
+    select(., Herbivore_C, α:q)
+
+herbHerbC_rf <- HerbCgsa %>% randomForest(Herbivore_C ~., 
+                                data = .,
+                                proximity = TRUE,
+                                importance = TRUE)
+
+herbHerbC_imp <- as_tibble(importance(herbHerbC_rf), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+
+ranked_imp_herbHerbC <- tibble(herbHerbC_imp[, 3]/sum(herbHerbC_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(herbHerbC_imp$Parameter),
+           SV = "Herbivore_C") %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+
+herbGSA <- bind_rows(ranked_imp_herbSoilN, ranked_imp_herbSoilC, ranked_imp_herbPlantN, ranked_imp_herbPlantC, ranked_imp_herbHerbN, ranked_imp_herbHerbC)
+```
+
+As a comparison, the code chunk below runs a GSA using all parameters for all 
+equations in the model. The chunk first allocates an empty dataframe, `herbGSAres`,
+in which we will store the results of the GSA. It then creates a vector of the
+names of the model's state variables, `stateV`. Using the `stateV` vector, we 
+then run a `for` loop to iterate the GSA over all six state variables in the 
+model, following the same steps detailed above. Results of this "full-model" GSA
+are store in object `herbGSAres`.
+
+```{r full-gsa-herbivore-model, echo=TRUE, tidy=TRUE}
+# allocate an empty df to store the full-model GSA results
+herbGSAres <- NULL
+
+# create a vector of the names of the state variables in the model
+stateV <- c("Soil_N", "Soil_C", "Plant_N", "Plant_C", "Herbivore_N", "Herbivore_C")
+
+# run the gsa
+for (i in 1:length(stateV)) {
+  
+  # filter out the herbivore model data and select only relevant parameters and 
+  # state variable
+  gsa <- filter(randomI, herbivore == "present") %>%
+    select(., stateV[i], I:k, α:q)
+  
+  # rename first column to a gneral purpose name
+  colnames(gsa)[1] <- "Stock"
+  
+  # run the gsa
+  sA_temp <- gsa %>%
+    select(., Stock:q) %>%
+    do(Cherb = randomForest(Stock ~.,
+                            data = .,
+                            proximity = TRUE,
+                            importance = TRUE))
+  
+  # extract the importance of each parameter
+  Cherb_imp <- as_tibble(importance(sA_temp[[1]][[1]]), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+  
+  # calculate the relative importance of each parameter
+  ranked_imp_Cherb <- tibble(Cherb_imp[, 3]/sum(Cherb_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(Cherb_imp$Parameter),
+           SV = as_factor(stateV[i])) %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+  
+  # store results into previously-allocated empty df
+  herbGSAres <- bind_rows(herbGSAres, ranked_imp_Cherb)
+  
+  # remove temporary dfs
+  rm(list = c("gsa", "sA_temp"))
+  
+  # cleanup memory
+  gc()
+  
+  # keep track of the loop
+  # print(i)
+  
+  # browser()
+}
+
+# herbGSAres
+```
+
+To show the results contained in the `herbGSAres` object produced by the `for` 
+loop above, uncomment the last line of code in the chunk above. Note that these
+results are not use to produce figures in section [Visual deliverables] below, 
+but existing code can be repurposed to do this.
+
+## Model without herbivores
+
+Having completed the GSA for the model _with_ herbivores, the code chunk below 
+repeats the GSA described above but for the model _without_ herbivores. For each
+state variable's equilibrium equation in the model _without_ herbivores, we fit 
+a `randomForest` algorithm using only the parameters that appear in said 
+equation. Following this, we calculate the Relative Importance Index for each 
+parameter using the same procedure described above.
+
+```{r compartment-wise-gsa-no-herbivore-model, echo=TRUE, tidy=TRUE}
+# Soil N
+noherbSoilNgsa <- filter(randomI, herbivore == "absent") %>%
+    select(., Soil_N, I, k)
+
+noherbSoilN_rf <- noherbSoilNgsa %>% randomForest(Soil_N ~., 
+                                data = .,
+                                proximity = TRUE,
+                                importance = TRUE)
+
+noherbSoilN_imp <- as_tibble(importance(noherbSoilN_rf), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+
+ranked_imp_noherbSoilN <- tibble(noherbSoilN_imp[, 3]/sum(noherbSoilN_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(noherbSoilN_imp$Parameter),
+           SV = "Soil_N") %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+
+# Soil C
+noherbSoilCgsa <- filter(randomI, herbivore == "absent") %>%
+    select(., Soil_C, I:k, rp, ap)
+
+noherbSoilC_rf <- noherbSoilCgsa %>% randomForest(Soil_C ~., 
+                                data = .,
+                                proximity = TRUE,
+                                importance = TRUE)
+
+noherbSoilC_imp <- as_tibble(importance(noherbSoilC_rf), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+
+ranked_imp_noherbSoilC <- tibble(noherbSoilC_imp[, 3]/sum(noherbSoilC_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(noherbSoilC_imp$Parameter),
+           SV = "Soil_C") %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+
+# Plant N
+noherbPlantNgsa <- filter(randomI, herbivore == "absent") %>%
+    select(., Plant_N, q, ap, rp, α, δ)
+
+noherbPlantN_rf <- noherbPlantNgsa %>% randomForest(Plant_N ~., 
+                                data = .,
+                                proximity = TRUE,
+                                importance = TRUE)
+
+noherbPlantN_imp <- as_tibble(importance(noherbPlantN_rf), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+
+ranked_imp_noherbPlantN <- tibble(noherbPlantN_imp[, 3]/sum(noherbPlantN_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(noherbPlantN_imp$Parameter),
+           SV = "Plant_N") %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+
+# Plant C
+noherbPlantCgsa <- filter(randomI, herbivore == "absent") %>%
+    select(., Plant_C, q, ap, rp, α, δ)
+
+noherbPlantC_rf <- noherbPlantCgsa %>% randomForest(Plant_C ~., 
+                                data = .,
+                                proximity = TRUE,
+                                importance = TRUE)
+
+noherbPlantC_imp <- as_tibble(importance(noherbPlantC_rf), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+
+ranked_imp_noherbPlantC <- tibble(noherbPlantC_imp[, 3]/sum(noherbPlantC_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(noherbPlantC_imp$Parameter),
+           SV = "Plant_C") %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+
+noherbGSA <- bind_rows(ranked_imp_noherbSoilN, ranked_imp_noherbSoilC, ranked_imp_noherbPlantN, ranked_imp_noherbPlantC)
+```
+
+The following code chunk runs a GSA using all parameters in the model for all 
+state variable's equilibrium equations, repeating all the steps described above 
+for the model _without_ herbivores. Results are stored in an object called 
+`noherbGSAres`.
+
+```{r full-gsa-no-herbivore-model, echo=TRUE, tidy=TRUE}
+# allocate an empty df to store the GSA results
+noherbGSAres <- NULL
+
+# create a vector of the names of the state variables in the model
+stateV <- c("Soil_N", "Soil_C", "Plant_N", "Plant_C")
+
+# run the gsa
+for (i in 1:length(stateV)) {
+  
+  # filter out the herbivore model data and select only relevant parameters and 
+  # state variable
+  gsa <- filter(randomI, herbivore == "absent") %>%
+    select(., stateV[i], I:k, α, δ:ap, rp, q)
+  
+  # rename first column to a gneral purpose name
+  colnames(gsa)[1] <- "Stock"
+  
+  # run the gsa
+  sA_temp <- gsa %>%
+    select(., Stock:q) %>%
+    do(Cnoherb = randomForest(Stock ~.,
+                            data = .,
+                            proximity = TRUE,
+                            importance = TRUE))
+  
+  # extract the importance of each parameter
+  Cnoherb_imp <- as_tibble(importance(sA_temp[[1]][[1]]), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+  
+  # calculate the relative importance of each parameter
+  ranked_imp_Cnoherb <- tibble(Cnoherb_imp[, 3]/sum(Cnoherb_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(Cnoherb_imp$Parameter),
+           SV = as_factor(stateV[i])) %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+  
+  # store results into previously-allocated empty df
+  noherbGSAres <- bind_rows(noherbGSAres, ranked_imp_Cnoherb)
+  
+  # remove temporary dfs
+  rm(list = c("gsa", "sA_temp"))
+  
+  # cleanup memory
+  gc()
+  
+  # keep track of the loop
+  # print(i)
+}
+
+# noherbGSAres
+```
+
+To show the results contained in the `noherbGSAres` object produced by the `for` 
+loop above, uncomment the last line of code in the chunk above. Note that these
+results are not reproduced in a figure in section [Visual deliverables] below, 
+but existing code in that section can be repurposed to accomplish this.
+
+# Ecosystem function analyses
+
+Here we will be performing quantitative analyses of how the _presence_ or 
+_absence_ of herbivores influences how the ecosystem works. Note that the 
+formulae for primary producers biomass, primary productivity, and Net Ecosystem
+Productivity (NECB) used below are derived in the Mathematica notebook companion 
+to this R notebook.
+
+## Primary Producers Biomass
+
+At equilibrium, the primary producers (i.e., plants) biomass for N is 
+
+<aside>
+Recall that  $P^*_C  = \alpha\cdot P^*_N$
+</aside>
+
+$$
+P^*_N = \frac{r_H}{a_H}
+$$
+
+We are interested in how this quantity, and its counterpart for C, are 
+influenced by the Herbivores' attack rate, _a~H~_. To investigate this, we can 
+take the partial derivative of equilibrium Plant biomass with respect to the 
+Herbivores' attack rate,
+
+$$
+  \frac{\partial P^*_N}{\partial a_H} = − \frac{r_H}{a^2_H}
+$$
+
+The code chunk below uses the parameter sets that produce feasible equilibria 
+to calculate this quantity and thus simulate the influence of herbivory on plant
+biomass accumulation. Note that, as we are working with the model _with_ 
+herbivores, the first step in the pipe uses function `filter()` from package
+`dplyr` to isolate the rows in dataframe `randomI` that correspond to this scenario.
+
+```{r herb-plant-biomass-part-deriv-ah, echo = TRUE, tidy = TRUE}
+EcoFunctPD <- randomI %>%
+  # filter to only include parameter set & results from the model _with_ herbivores
+  filter(., herbivore == "present") %>% 
+  # calculate the partial derivative of equilibrium Plant N and C biomass w.r.t. ah and rh
+  mutate(., Plant_N_ah = -(rh/ah^2),
+         Plant_C_ah = α*-(rh/ah^2))
+```
+
+We are also interested in how Plant biomass varies with Herbivores recycling 
+rate, _r~H~_. The partial derivative formula on the N-side of the model is,
+
+$$
+  \frac{\partial P^*_N}{\partial r_H} = \frac{1}{a_H}
+$$
+
+And we can derive the formula for the partial derivative on the C-side of the 
+model by simply multiplying it by _α_. The code chunk below uses the 
+`EcoFunctPD` dataframe create in the earlier code chunk to calculate partial 
+derivative of _P^*^_ with respect to _r~H~_. 
+
+```{r herb-plant-biomass-part-deriv-rh, echo = TRUE, tidy = TRUE}
+EcoFunctPD <- mutate(EcoFunctPD, 
+                     Plant_N_rh = 1/ah,
+                     Plant_C_rh = α*(1/ah))
+```
+
+The table below provides a few summary statistics for the partial derivatives of 
+equilibrium plant biomass with respect to _a~H~_ and _r~H~_ on both the N and C 
+sides of the model. Note that, in this table, we **do not** remove the top and 
+bottom 5% of the results, as done elsewhere in this notebook.
+
+```{r herb-plant-biomass-part-deriv-summary, echo=TRUE, tidy=TRUE}
+EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, Plant_N_ah:Plant_C_rh) %>%
+  pivot_longer(., cols = c(Plant_N_ah:Plant_C_rh), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient", "Variable"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, Present = "present"),
+         Variable = as_factor(Variable),
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  # group by Nutrient and Variable
+    # dplyr::group_by(., Nutrient,
+    #                 Variable) %>% 
+  # filter the top and bottom 5% of data points to remove outliers
+    # dplyr::filter(., between(Biomass, 
+    #                          quantile(Biomass, 0.05, na.rm = T), 
+    #                          quantile(Biomass, 0.95, na.rm = T)),
+    #                          .preserve = TRUE) %>%
+  # remove grouping
+  # ungroup() %>%
+  dplyr::select(., Nutrient:Biomass) %>%
+  # create a multi-level summary table using gt_summary::tbl_summary()
+  tbl_strata(.,
+             strata = Nutrient,
+             .tbl_fun = 
+               ~.x %>% 
+               tbl_summary(by = Variable,
+                           type = list(Biomass ~ 'continuous2'),
+                           statistic = Biomass ~ c("{N_obs}",
+                                                    "{median}\n ({p25}, {p75})",
+                                                    "{min}; {max}"),
+                           include = Biomass,
+                           digits = Biomass ~ 2) %>%
+                modify_header(
+                 label = '<b>Partial Derivative</b>',
+                 stat_1 = '<i>a<sub>H</sub></i>',
+                 stat_2 = '<i>r<sub>H</sub></i>',
+                 text_interpret = "html"
+                 ) %>%
+               add_stat_label(label = Biomass ~ c("n", 
+                                                "Median\n (IQR)", 
+                                                "Min; Max")) ,
+             .header = "**{strata}**")
+```
+
+## Primary Productivity
+
+We use the $\Phi_P$ term as a proxy for primary productivity in either modeling
+scenario, _with_ or _without_ herbivores. Below, we 
+calculate primary productivity for both scenario. Then investigate its partial 
+derivative ($\partial\Phi_P$) with respect to parameters _a~H~_ and _r~H~_ for the 
+model _with_ herbivores. Note that the formulae for $\partial\Phi_P$ vary based on 
+whether we are calculating it on the C- or on the N-side of the model.
+
+Substituting the equilibrium values of the state variables $S^*_i$, $P^*_i$, 
+$H^*_i$, where $i \in [N, C]$, in the formula for $\Phi_P$ gives us the 
+equilibrium value of primary productivity in the ecosystem _with_ herbivores,
+
+$$
+\Phi^*_P = \frac{a_{P} r_{h}^{2} r_{P} (\alpha + (-1 + \pi) \beta - \alpha \delta)}{a_{H} (a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta)}
+$$
+
+whereas, for the model _without_ herbivores, the formula for primary productivity
+is
+
+$$
+  \Phi^*_P = \frac{q_{S} r_{P}}{a_{P} \alpha - a_{P} \alpha \delta}
+$$
+
+We use these two formulae to calculate primary productivity at equilibrium (`PP`
+in the code chunk) for both version of the model in the next code chunk.
+
+```{r herb-prim-prod-eq, echo=TRUE, tidy=TRUE}
+PrimProd <- randomI %>% 
+  mutate(.,
+         PP = ifelse(herbivore == "present",
+                     (ap*rh^2*rp*(α+(-1+π)*β-α*δ))/(ah*(ah*q+ap*(-1+π)*rh*δ)),
+                     (q*rp)/(ap*α-ap*α*δ)),
+         PPc = ifelse(herbivore == "present",
+                     α*PP,
+                     (q*rp)/(ap-ap*δ)))
+```
+
+Note that in the code chunk above, the Primary Productivity for C is simply 
+$\alpha \Phi^*_{P_N}$ as shown in the Mathematica notebook.
+
+Focusing now **only** on the model _with_ herbivores, we take the partial 
+derivative ($\partial$) of $\Phi^*_P$ with respect to _a~H~_. For N we get,
+
+$$
+\frac{\partial\Phi^*_{P_N}}{\partial a_{H}} = \frac{a_{P} r_{H}^{2} r_{P} (2 a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta) (\beta - \pi \beta + \alpha (-1 + \delta))}{a_{H}^{2} (a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta)^{2}}
+$$
+
+Whereas for C, we get
+
+$$
+\frac{\partial\Phi^*_{P_C}}{\partial a_{H}} = \frac{a_{P} r_{H}^{2} r_{P} \alpha (2 a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta) (\beta - \pi \beta + \alpha (-1 + \delta))}{a_{H}^{2} (a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta)^{2}}
+$$
+
+Using these formulae, we can calculate the value of the **change** in primary 
+productivity at equilibrium for both N and C (`PP_N_ah` and `PP_C_ah` in the 
+code chunk) using the parameter sets that produced feasible equilibria.
+
+```{r herb-prim-prod-part-deriv-ah, echo=TRUE, tidy = TRUE}
+EcoFunctPD <- mutate(EcoFunctPD,
+                     PP = (ap*rh^2*rp*(α+(-1+π)*β-α*δ))/(ah*(ah*q+ap*(-1+π)*rh*δ)),
+                     PPc = α*PP,
+                     PP_N_ah = (ap*rh^2*rp*(2*ah*q+ap*(-1+π)*rh*β)*(β-π*β+α*(-1+δ)))/(ah^2*(ah*q+ap*(-1+π)*rh*β)^2),
+                     PP_C_ah = (ap*rh^2*rp*α*(2*ah*q+ap*(-1+π)*rh*β)*(β-π*β+α*(-1+δ)))/(ah^2*(ah*q+ap*(-1+π)*rh*β)^2))
+```
+
+Similarly, we can derive the partial derivatives for $\Phi^*_P$ with respect to 
+_r~H~_. For N, we have, 
+
+$$
+\frac{\partial \Phi^*_{P_N}}{\partial r_H} = \frac{a_{P} r_{H} r_{P} (2 a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta) (\alpha + (-1 + \pi) \beta - \alpha \delta)}{a_{H} (a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta)^2}
+$$
+
+Whereas for C we have,
+
+$$
+\frac{\partial \Phi^*_{P_C}}{\partial r_H}  = \frac{a_{P} r_{H} r_{P} \alpha (2 a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta) (\alpha + (-1 + \pi) \beta - \alpha \delta)}{a_{H} (a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta)^2}
+$$
+
+Plugging the values of the parameters in these equations, we can get a quantitative
+estimate of the change in primary productivity as the values of _a~H~_ and 
+_r~H~_ increase.
+
+```{r herb-prim-prod-part-deriv-rh, echo=TRUE, tidy=TRUE}
+EcoFunctPD <- mutate(EcoFunctPD,
+                     PP_N_rh = (ap*rh*rp*(2*ah*q+ap*(-1+π)*rh*β)*(α+(-1+π)*β- α*δ))/(ah*(ah*q+ap*(-1+π)*rh*β)^2),
+                     PP_C_rh = (ap*rh*rp*α*(2*ah*q+ap*(-1+π)*rh*β)*(α+(-1+π)*β-α*δ))/(ah*(ah*q+ap*(-1+π)*rh*β)^2))
+```
+
+Below, we tabulate a few summary statistics for these partial derivatives. Again,
+this table contains the **full range** of results.
+
+```{r herb-prim-prod-part-deriv-summary, echo=TRUE, tidy=TRUE}
+EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, PP_N_ah:PP_C_rh) %>%
+  pivot_longer(., cols = c(PP_N_ah:PP_C_rh), 
+               names_to = "EcoFunct", 
+               values_to = "dPP") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient", "Variable"), 
+                       delim = "_") %>%
+  # make sure "Compartment" and "herbivore" are factors
+  mutate(., 
+         Variable = as_factor(Variable),
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  # # group by the three factors of interest
+  # dplyr::group_by(., herbivore,
+  #                 Nutrient,
+  #                 Variable) %>%
+  # # filter the top and bottom 5% of data points to remove outliers
+  # dplyr::filter(.,
+  #               between(PP,
+  #                       quantile(PP, 0.05, na.rm = T),
+  #                       quantile(PP, 0.95, na.rm = T)),
+  #                       .preserve = TRUE) %>%
+  # ungroup() %>%
+  dplyr::select(., Nutrient:dPP) %>%
+  tbl_strata(.,
+             strata = Nutrient,
+             .tbl_fun = 
+               ~.x %>% 
+               tbl_summary(by = Variable,
+                           label = list(dPP ~ "Primary Productivity"),
+                           type = list(dPP ~ 'continuous2'),
+                           statistic = dPP ~ c("{N_obs}",
+                                                    "{median}\n ({p25}, {p75})",
+                                                    "{min}; {max}"),
+                           include = dPP,
+                           digits = dPP ~ 2) %>%
+                modify_header(
+                 label = '<b>Partial Derivative</b>',
+                 stat_1 = '<i>a<sub>H</sub></i>',
+                 stat_2 = '<i>r<sub>H</sub></i>',
+                 text_interpret = "html"
+                 ) %>%
+               add_stat_label(label = dPP ~ c("n", 
+                                                "Median\n (IQR)", 
+                                                "Min; Max")) ,
+             .header = "**{strata}**"
+    
+  )
+```
+
+### Global Sensitivity Analysis
+
+As described in the manuscript, here we perform a global sensitivity analysis 
+(GSA) to assess the relative importance of each parameter in shaping the primary
+productivity results. Note that we include in the GSA only those parameters that
+appears in the formulae for primary productivity for N and C reported above.
+
+The next code chunk runs the GSA for the model _with_ herbivores.
+
+```{r gsa-prim-prod-herb, echo=TRUE, tidy=TRUE}
+# nitrogen
+# filter out the herbivore model data and select only relevant parameters and 
+# state variable
+gsaPPherb <- PrimProd %>%
+  filter(., herbivore == "present") %>%
+  select(., PP, α:q)
+
+# run the gsa
+PPsA_herb <- gsaPPherb %>%
+    select(., PP:q) %>%
+    do(PPgsa = randomForest(PP ~.,
+                            data = .,
+                            proximity = TRUE,
+                            importance = TRUE))
+  
+# extract the importance of each parameter
+PPgsaHerb_imp <- as_tibble(importance(PPsA_herb[[1]][[1]]), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+  
+# calculate the relative importance of each parameter
+ranked_imp_PPherb <- tibble(PPgsaHerb_imp[, 3]/sum(PPgsaHerb_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(PPgsaHerb_imp$Parameter)) %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+
+# carbon
+gsaPPherbc <- PrimProd %>%
+  filter(., herbivore == "present") %>%
+  select(., PPc, α:q)
+
+# run the gsa
+PPsA_herbc <- gsaPPherbc %>%
+    select(., PPc:q) %>%
+    do(PPgsac = randomForest(PPc ~.,
+                            data = .,
+                            proximity = TRUE,
+                            importance = TRUE))
+  
+# extract the importance of each parameter
+PPgsaHerb_impc <- as_tibble(importance(PPsA_herbc[[1]][[1]]), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+  
+# calculate the relative importance of each parameter
+ranked_imp_PPherbc <- tibble(PPgsaHerb_impc[, 3]/sum(PPgsaHerb_impc[, 3])) %>% 
+    mutate(., Parameter = as_factor(PPgsaHerb_impc$Parameter)) %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+```
+
+And this code chunk runs the GSA for the model _without_ herbivores.
+
+```{r gsa-prim-prod-no-herb, echo=TRUE, tidy=TRUE}
+# nitrogen
+# as the EcoFunctPD dataframe does not include 
+gsaPPnoherb <- PrimProd %>%
+  filter(., herbivore == "absent") %>%
+  select(., PP, α, δ, ap, rp, q)
+
+# run the gsa
+PPsA_noherb <- gsaPPnoherb %>%
+    select(., PP:q) %>%
+    do(PPgsa = randomForest(PP ~.,
+                            data = .,
+                            proximity = TRUE,
+                            importance = TRUE))
+  
+# extract the importance of each parameter
+PPgsaNoHerb_imp <- as_tibble(importance(PPsA_noherb[[1]][[1]]), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+  
+# calculate the relative importance of each parameter
+ranked_imp_PPnoherb <- tibble(PPgsaNoHerb_imp[, 3]/sum(PPgsaNoHerb_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(PPgsaNoHerb_imp$Parameter)) %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+
+# carbon
+# as the EcoFunctPD dataframe does not include 
+gsaPPnoherbc <- PrimProd %>%
+  filter(., herbivore == "absent") %>%
+  select(., PPc, δ, ap, rp, q)
+
+# run the gsa
+PPsA_noherbc <- gsaPPnoherbc %>%
+    select(., PPc:q) %>%
+    do(PPgsac = randomForest(PPc ~.,
+                            data = .,
+                            proximity = TRUE,
+                            importance = TRUE))
+  
+# extract the importance of each parameter
+PPgsaNoHerb_impc <- as_tibble(importance(PPsA_noherbc[[1]][[1]]), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+  
+# calculate the relative importance of each parameter
+ranked_imp_PPnoherbc <- tibble(PPgsaNoHerb_impc[, 3]/sum(PPgsaNoHerb_impc[, 3])) %>% 
+    mutate(., Parameter = as_factor(PPgsaNoHerb_impc$Parameter)) %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+```
+
+## Net Ecosystem Carbon Balance
+
+Here, we use the Net Ecosystem Carbon Balance (NECB) equation presented in 
+the manuscript to investigate its estimates may differ between the model _with_ 
+and _without_ herbivores. We then use partial derivatives of NECB
+at equilibrium with respect to the herbivores' attack rate (_a~H~_)
+and recycling rate (_r~H~_) to test for the influence of these processes on the
+balance of C in the ecosystem.
+
+> Note that in this section, unlike the analyses we ran for [Primary Producers Biomass] and [Primary Productivity], we focus exclusively on carbon. 
+
+#### Comparing NECB between scenarios 
+
+At equilibrium, NECB for the model _with_ herbivores is,
+
+$$
+NECB^* = -\frac{r_{H} r_{P} (a_{P} r_{H} \alpha (\alpha + 2 \pi \beta) (-1 + \delta) + a_{H} q_{S} (\beta + \pi \beta + \alpha \delta))}{a_{H} (a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta)}
+$$
+
+And for the model _without_ herbivores,
+
+$$
+NECB^* = \frac{(q_{S} r_{P})}{a_{P}}
+$$
+
+The code chunk below uses this formula and dataframe `randomI` to calculate NECB 
+for the model _with_ and _without_ herbivores, and then computes a few summary 
+statistics. 
+
+```{r echo=TRUE, tidy=FALSE}
+NECBres <- randomI %>%
+  mutate(.,
+         NECB = ifelse(herbivore == "present",
+                -((rh*rp*(ap*rh*α*(α+2*π*β)*(-1+δ)+ah*q*(β+π*β+α*δ)))/(ah*(ah*q+ap*(-1+π)*rh*β))),
+                (q*rp)/ap), 
+         herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, Present = "present", Absent = "absent")) %>%
+  dplyr::group_by(., herbivore) %>%
+  dplyr::filter(., between(NECB,
+                           quantile(NECB, 0.05, na.rm = T),
+                           quantile(NECB, 0.95, na.rm = T)),
+                .preserve = TRUE) %>%
+  ungroup()
+
+tbl_summary(NECBres, 
+              by = herbivore, 
+              label = list(NECB ~ "NECB"),
+              type = list(NECB ~ 'continuous2'),
+              statistic = NECB ~ c("{N_obs}",
+                                  "{median}\n ({p25}, {p75})",
+                                  "{mean} ({sd})",
+                                  "{min}; {max}"),
+              include = NECB,
+              digits = NECB ~ 2) %>%
+  modify_header(.,
+                label = ' ',
+                stat_1 = '**{level}**',
+                stat_2 = '**{level}**'
+                ) %>%
+  add_stat_label(.,
+                 label = NECB ~ c("n",
+                                  "Median (IQR)", 
+                                  "Mean (SD)",
+                                  "Min; Max"))
+```
+
+#### Change in NECB with herbivory
+
+When taking the partial derivative of equilibrium NECB for the model _with_ 
+herbivores with respect to _a~H~_, we have
+
+$$
+\frac{\partial NECB^*}{\partial a_{H}} = \frac{r_{H} r_{P} (2 a_{H} a_{P} q_{S} r_{H} \alpha (\alpha + 2 \pi \beta) (-1 + \delta) + a_{P}^2 (-1 + \pi) r_{H}^2 \alpha \beta (\alpha + 2 \pi \beta) (-1 + \delta) + a_{H}^2 q_{S}^2 (\beta + \pi \beta + \alpha \delta))}{a_{H}^2 (a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta)^2}
+$$
+
+Similarly, the partial derivative of equilibrium NECB with respect to _r~H~_ is
+
+$$
+\frac{\partial NECB^*}{\partial r_{H}} = -\frac{r_{P} (2 a_{H} a_{P} q_{S} r_{H} \alpha (\alpha + 2 \pi \beta) (-1 + \delta) + a_{P}^2 (-1 + \pi) r_{H}^2 \alpha \beta (\alpha + 2 \pi \beta) (-1 + \delta) + a_{H}^2 q_{S}^2 (\beta + \pi \beta + \alpha \delta))}{a_{H} (a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta)^2}
+$$
+
+Now we can use these two expressions to calculate the equilibrium values for
+NECB using the parameter sets that produce feasible equilibria.
+
+```{r echo=TRUE, tidy=TRUE}
+NECBPD <- EcoFunctPD %>% 
+  mutate(.,
+         NECB_ah = (rh*rp*(2*ah*ap*q*rh*α*(α+2*π*β)*(-1+δ)+ap^2*(-1+π)*rh^2*α*β*(α+2*π*β)*(-1+δ)+ah^2*q^2*(β+π*β+α*δ)))/(ah^2*(ah*q+ap*(-1+π)*rh*β)^2),
+         NECB_rh = -((rp*(2*ah*ap*q*rh*α*(α+2*π*β)*(-1+δ)+ap^2*(-1+π)*rh^2*α*β*(α+2*π*β)*(-1+δ)+ah^2*q^2*(β+π*β+α*δ)))/(ah*(ah*q+ap*(-1+π)*rh*β)^2)))
+```
+
+Below, we compute a few summary statistics and table them for ease of reading. 
+
+```{r echo=TRUE, tidy=TRUE}
+NECBPD %>%
+  dplyr::select(., herbivore, TIME, NECB_ah:NECB_rh) %>%
+  pivot_longer(., cols = c(NECB_ah:NECB_rh), 
+               names_to = "EcoFunct", 
+               values_to = "NECB") %>%
+  # separate the name of elements in "EcoFunct" in "EcoFunct" 
+  # and "Variable"
+  separate(., col = "EcoFunct", 
+              into = c("EcoFunct", "Variable"), 
+              sep = "_") %>%
+  # make sure categorical variables are coded as factors
+  mutate(.,
+         herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, Present = "present"),
+         Variable = as_factor(Variable)) %>%
+  # group by factor of interest
+  dplyr::group_by(., Variable) %>% 
+  # filter the top and bottom 5% of data points to remove outliers
+  dplyr::filter(., 
+                between(NECB,
+                        quantile(NECB, 0.05, na.rm = T),
+                        quantile(NECB, 0.95, na.rm = T)),
+                .preserve = TRUE) %>%
+  ungroup() %>%
+  tbl_summary(by = Variable,
+              type = list(NECB ~ 'continuous2'),
+              statistic = NECB ~ c("{N_obs}",
+                                  "{median}\n ({p25}, {p75})",
+                                  "{min}--{max}"),
+              include = NECB,
+              digits = NECB ~ 2) %>%
+  modify_header(.,
+                label = '<b>Partial Derivative</b>',
+                stat_1 = '<b>a<sub>H</sub></b>',
+                stat_2 = '<b>r<sub>H</sub></b>',
+                text_interpret = "html") %>%
+  add_stat_label(.,
+                 label = NECB ~ c("n",
+                                 "Median\n (IQR)",
+                                 "Min-Max"))
+```
+
+#### Global Sensitivity Analysis
+
+Here we perform a GSA to assess how each parameter in the NECB equation 
+contributes to shaping the carbon balance of the ecosystem. The next code chunk 
+does so for the model _with_ herbivores.
+
+```{r gsa-NECB-new-herb, echo=TRUE, tidy=TRUE}
+# filter out the herbivore model data and select only relevant parameters and 
+# state variable
+gsaNECB <- filter(NECBres, herbivore == "Present") %>%
+    select(., NECB, α:q)
+
+# run the gsa
+NECBsA <- gsaNECB %>%
+    select(., NECB:q) %>%
+    do(NECBgsa = randomForest(NECB ~.,
+                            data = .,
+                            proximity = TRUE,
+                            importance = TRUE))
+  
+# extract the importance of each parameter
+NECBgsa_imp <- as_tibble(importance(NECBsA[[1]][[1]]), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+  
+# calculate the relative importance of each parameter
+ranked_imp_NECB <- tibble(NECBgsa_imp[, 3]/sum(NECBgsa_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(NECBgsa_imp$Parameter)) %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+```
+
+And for the model _without_ herbivores.
+
+```{r gsa-NECB-new-no-herb, echo=TRUE, tidy=TRUE}
+# filter out the herbivore model data and select only relevant parameters and 
+# state variable
+gsaNECB_noherb <- filter(NECBres, herbivore == "Absent") %>%
+    select(., NECB, ap, rp, q)
+
+# run the gsa
+NECBsA_noherb <- gsaNECB_noherb %>%
+    select(., NECB:q) %>%
+    do(NECBgsa = randomForest(NECB ~.,
+                            data = .,
+                            proximity = TRUE,
+                            importance = TRUE))
+  
+# extract the importance of each parameter
+NECBgsa_noherb_imp <- as_tibble(importance(NECBsA_noherb[[1]][[1]]), rownames = NA) %>% 
+      rownames_to_column(., var = "Parameter") 
+  
+# calculate the relative importance of each parameter
+ranked_imp_NECB_noherb <- tibble(NECBgsa_noherb_imp[, 3]/sum(NECBgsa_noherb_imp[, 3])) %>% 
+    mutate(., Parameter = as_factor(NECBgsa_noherb_imp$Parameter)) %>%
+    dplyr::rename(., RelImpI = IncNodePurity)
+```
+
+# Visual deliverables
+
+Here, we build graphs to explore the results of our modeling and present results
+from our modeling work. 
+
+## Herbivore influences on soil, plants C and N content
+
+Herbivore _presence_ or _absence_ may influence the total amount of
+C and N present in the system, as adding an additional trophic 
+level requires higher productivity required to support it [@Oksanen1981]. 
+Summing the C and N content across trophic compartment provides initial insights
+on whether the presence of Herbivores sparks quantitative changes in the amounts
+of these two nutrients circling in the ecosystem (sensu @Rastetter1997). We show
+this in Figure \@ref(fig:total-stock-contrast) below. Notice that here, as done 
+elsewhere in this notebook, we exclude the top and bottom 5% data points from 
+the graph to avoid visual artifacts due to outliers.
+ 
+```{r total-stock-contrast, echo=TRUE, tidy=TRUE, dpi=120, fig.retina=3, layout="l-body-outset", fig.cap="Contrast of total C and N stock in the ecosystem, when Herbivores are present or absent. The ecosystem _with_ herbivores contains a much larger quantity of both nutrients, C and N, compared to the system _without_ the extra trophic compartment. In particular, the ecosystem's total content of C increases by two orders of magnitude when Herbivores are _present_ compared to when they are _absent_. Similarly, the total content of N in the ecosystem increases by one order of magnitude in the system with a tri-trophic food chain. Indeed, theoretical and empirical evidence suggest that larger amount of nutrients and energy are required to sustain longer, more complex trophic chains (**REF HERE**). These results, then, not only confirm these earlier evidence and expectations but also point to the presence of primary consumers substantially affecting the **bio**chemical balance of the ecosystem---further supporting the theoretical predictions of **zoo**geochemistry [@Schmitz2014;@Schmitz2018]. Labels floating above the clound of points report the median content of the relevant nutrient for each trophic compartment. Note the different scales on the y-axis and that the top and bottom 5% were removed to avoid visual artefacts due to outliers."}
+# pivot the dataframe
+randomI %>% 
+    pivot_longer(., cols = c(Total_N, Total_C), 
+                 names_to = "Compartment", 
+                 values_to = "Stock") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+    separate(., col = "Compartment", 
+             into = c("Compartment", "Nutrient"), 
+             sep = "_") %>%
+  # make sure "Compartment" and "herbivore" are factors
+    mutate(., Compartment = as_factor(Compartment),
+           herbivore = as_factor(herbivore),
+           herbivore = fct_recode(.f = herbivore, Present = "present", Absent = "absent"),
+           Nutrient = as_factor(Nutrient),
+           Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+           Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  # group by the three factors of interest
+    dplyr::group_by(., herbivore, 
+                    Compartment, 
+                    Nutrient) %>% 
+  # filter the top and bottom 5% of data points to remove outliers
+    dplyr::filter(., between(Stock, 
+                          quantile(Stock, 0.05, na.rm = T), 
+                          quantile(Stock, 0.95, na.rm = T)),
+                  .preserve = TRUE) %>% 
+  # plot the results
+    ggplot(., aes(x = herbivore, y = Stock, col = herbivore)) + 
+    gghalves::geom_half_boxplot(center = T, outlier.color = NA, notch = T, errorbar.draw = F, nudge = 0.05) +
+    gghalves::geom_half_point(shape = 21, alpha = 0.1, stroke = 2) +
+    # geom_boxjitter(alpha = .25,
+    #                outlier.stroke = 1, outlier.shape = 21, outlier.size = 2,
+    #                outlier.alpha = 0.25, outlier.intersect = TRUE,
+    #                jitter.stroke = 1, jitter.shape = 21, jitter.size = 2,
+    #                jitter.alpha = 0.25, jitter.position = position_jitter(width = 3),
+    #                errorbar.draw = T, notch = T,
+    #                position = position_dodge(width = ),
+    #                na.rm = T) +
+    # geom_boxplot(notch = T, na.rm = T, outlier.shape = NA) +
+    stat_summary(geom = "label", fun = quantile,
+                 fun.args = list(probs = 0.5),
+                 aes(label = round(after_stat(y), 2)),
+                 position = position_nudge(x = 0.19),
+                 show.legend = F, size = 2.5,
+                 label.padding = unit(0.15, "lines"),
+                 label.size = 0.15,
+                 fontface = "bold",
+                 color = "black") +
+    # coord_cartesian(ylim = c(0, 800)) +
+    xlab("Total nutrient content") +
+    scale_color_met_d("Egypt", direction = 1) +
+    guides(color = guide_legend(title = "Herbivore", override.aes = list(alpha = 1, stroke = 1))) +
+    facet_wrap(.~Nutrient,
+               scales = "free") +
+    theme_classic() +
+    theme(legend.position = "bottom",
+          text = element_text(size = 14),
+          axis.text.x = element_blank(),
+          axis.ticks.x = element_blank())
+
+# save the graph
+# ggsave(filename = "../Results/HerbivoreContrast_randomI_TotalStocks.svg", 
+#        dpi = 300, path = "../Results/", device = "svg", height = 5, width = 8)
+```
+
+Figure \@ref(fig:herbivore-contrast) below shows a summary of the differences in the C and N 
+content in Soil and Plants when herbivores are _present_ vs. when they are
+_absent_ from the system. Figure \@ref(fig:herbivore-contrast) appears in the 
+Appendices of the manuscript as **Figure D.1**. Note that (i) to prevent 
+graphical artefacts we exclude the top and bottom 5% of stock 
+values from the graph and (ii) we do not include Herbivores in this graph.  
+
+```{r herbivore-contrast, echo=TRUE, tidy=TRUE, dpi=120, fig.retina=3, layout="l-body-outset", fig.cap="Contrast of how herbivore _presence_ and _absence_ influences the content of C and N in the soil and plant compartments, when ecosystems receive random amounts of inorganic nutrient inputs (parameter _I_). The main difference between systems _with_ (left panel) and _without_ (right panel) herbivores is the higher amounts of C locked in plant biomass in ecosystems _with_ herbivores. As shown Figure 1, when herbivores are present a much larger amount of C is captured in the system than when they are absent. Here, we show that a sizeable portion of this larger quantity of captured C is locked in Plant biomass, while the remaining one is split unevenly between Soil and Herbivore stocks. As well, note that the amount of C store in Soil stocks is one order of magnitude larger when herbivores are _present_ than when they are _absent_. Labels floating above the clound of points report the median content of the relevant nutrient for each trophic compartment. Note that, to avoid graphical artefacts due to the presence of extreme values in the dataset, we removed the top and bottom 5% of stock values of both C and N in both soil and plant compartments. See **Table 1** below for the values of the summary statistics shown here."}
+# build the graph
+stockContrast <- randomI %>% 
+  pivot_longer(., cols = c(Soil_N:Herbivore_C), 
+               names_to = "Compartment", 
+               values_to = "Stock") %>% 
+  separate(., col = "Compartment", 
+           into = c("Compartment", "Nutrient"), 
+           sep = "_") %>%
+  mutate(., Compartment = as_factor(Compartment),
+         herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, Present = "present", Absent = "absent"),
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, sort)) %>%
+  dplyr::group_by(., herbivore, 
+                  Compartment, 
+                  Nutrient) %>% 
+  dplyr::filter(., between(Stock, 
+                        quantile(Stock, 0.05, na.rm = T), 
+                        quantile(Stock, 0.95, na.rm = T)),
+                .preserve = TRUE) %>% 
+  ggplot(., aes(x = herbivore, y = Stock, col = herbivore)) + 
+  gghalves::geom_half_boxplot(center = T, outlier.color = NA, notch = T, errorbar.draw = F, nudge = 0.05) +
+  gghalves::geom_half_point(shape = 21, alpha = 0.2) +
+  # geom_boxplot(notch = T, na.rm = T, outlier.shape = NA) +
+  stat_summary(geom = "label", fun = quantile,
+               fun.args = list(probs = 0.5),
+               aes(label = round(after_stat(y), 2)),
+               position = position_nudge(x = 0.19),
+               show.legend = F, size = 2.5,
+               label.padding = unit(0.15, "lines"),
+               label.size = 0.15,
+               fontface = "bold",
+               color = "black") +
+  scale_color_met_d("Egypt", direction = 1) + 
+  xlab("Herbivore") +
+  facet_grid2(Nutrient~Compartment,
+             scales = "free",
+             independent = "y") +
+  theme_classic() +
+  theme(legend.position = "none")
+
+# ggsave(filename = "../Results/HerbivoreContrast_randomI.svg",
+#        dpi = 300, path = "../Results/", device = "svg", height = 5, width = 8)
+
+stockContrast
+```
+
+The summary table below lists the values of the summary statistics shown in 
+Figure \@ref(fig:herbivore-contrast), complete with the Herbivores data. 
+The table is organized by model version (herbivore _present_ or _absent_; columns), 
+with each column capturing summary statistics by nutrient (N or C), and by 
+trophic compartment (Soil, Plants, or Herbivores; rows).
+
+```{r summary-tab, echo=TRUE, tidy=TRUE}
+soil_tab <- randomI %>%  
+  pivot_longer(., cols = c(Soil_N:Herbivore_C), 
+               names_to = "Compartment", 
+               values_to = "Stock") %>% 
+  separate(., col = "Compartment", 
+           into = c("Compartment", "Nutrient"), 
+           sep = "_") %>%
+  mutate(., Compartment = as_factor(Compartment),
+         herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, 
+                                "Herbivore present" = "present", 
+                                "Herbivore absent" = "absent")) %>%
+  dplyr::group_by(., herbivore, 
+                  Compartment, 
+                  Nutrient) %>% 
+  dplyr::filter(., Compartment == "Soil", 
+                between(Stock, 
+                        quantile(Stock, 0.05, na.rm = T), 
+                        quantile(Stock, 0.95, na.rm = T)),
+                .preserve = TRUE) %>% 
+  dplyr::ungroup() %>%
+  dplyr::group_by(., herbivore) %>%
+  tbl_strata(.,
+             strata = herbivore,
+             .tbl_fun =
+               ~.x %>%
+               tbl_summary(by = Nutrient,
+                           type = list(Stock ~ 'continuous2'),
+                           statistic = Stock ~ c("{N_obs}",
+                                                 "{median}\n ({p25}, {p75})",
+                                                 "{min}-{max}"),
+                           include = Stock,
+                           digits = Stock ~ 2) %>%
+               modify_header(
+                 label = '**Nutrient**',
+                 stat_1 = '**{level}**',
+                 stat_2 = '**{level}**'
+                 ) %>%
+               add_stat_label(label = Stock ~ c("n", 
+                                                "Median\n (IQR)", 
+                                                "Min-Max")) %>%
+               modify_caption("Summary statistics for equilibrium stock values of C and N when Herbivores are _present_ and _absent_ from the ecosystem, as shown in Figure 1."),
+             .header = "**{strata}**"
+             )
+
+plant_tab <- randomI %>%  
+    pivot_longer(., cols = c(Soil_N:Herbivore_C), 
+               names_to = "Compartment", 
+               values_to = "Stock") %>% 
+  separate(., col = "Compartment", 
+           into = c("Compartment", "Nutrient"), 
+           sep = "_") %>%
+  mutate(., Compartment = as_factor(Compartment),
+         herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, 
+                                "Herbivore present" = "present", 
+                                "Herbivore absent" = "absent")) %>%
+  dplyr::group_by(., herbivore, 
+                  Compartment, 
+                  Nutrient) %>% 
+  dplyr::filter(., Compartment == "Plant", 
+                between(Stock, 
+                        quantile(Stock, 0.05, na.rm = T), 
+                        quantile(Stock, 0.95, na.rm = T)),
+                .preserve = TRUE) %>% 
+  dplyr::ungroup() %>%
+  dplyr::group_by(., herbivore) %>%
+  tbl_strata(.,
+             strata = herbivore,
+             .tbl_fun = 
+               ~.x %>% 
+               tbl_summary(by = Nutrient,
+                           type = list(Stock ~ 'continuous2'),
+                           statistic = Stock ~ c("{N_obs}",
+                                                 "{median}\n ({p25}, {p75})",
+                                                 "{min}-{max}"),
+                           include = Stock,
+                           digits = Stock ~ 2) %>% 
+               modify_header(
+                 label = '**Nutrient**',
+                 stat_1 = '**{level}**',
+                 stat_2 = '**{level}**'
+                 ) %>%
+               add_stat_label(label = Stock ~ c("n", 
+                                                "Median\n (IQR)", 
+                                                "Min-Max")),
+             .header = "**{strata}**"
+             )
+
+herb_tab <- randomI %>% 
+  pivot_longer(., cols = c(Soil_N:Herbivore_C), 
+               names_to = "Compartment", 
+               values_to = "Stock") %>% 
+  separate(., col = "Compartment", 
+           into = c("Compartment", "Nutrient"), 
+           sep = "_") %>%
+  mutate(., Compartment = as_factor(Compartment),
+         herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, 
+                                "Herbivore present" = "present", 
+                                "Herbivore absent" = "absent")) %>%
+  dplyr::group_by(., herbivore, 
+                  Compartment, 
+                  Nutrient) %>% 
+  dplyr::filter(., Compartment == "Herbivore", 
+                between(Stock, 
+                        quantile(Stock, 0.05, na.rm = T), 
+                        quantile(Stock, 0.95, na.rm = T)),
+                .preserve = TRUE) %>% 
+  dplyr::ungroup() %>%
+  dplyr::group_by(., herbivore) %>%
+  tbl_strata(.,
+             strata = herbivore,
+             .tbl_fun = 
+               ~.x %>% 
+               tbl_summary(by = Nutrient,
+                           type = list(Stock ~ 'continuous2'),
+                           statistic = Stock ~ c("{N_obs}",
+                                                 "{median}\n ({p25}, {p75})",
+                                                 "{min}-{max}"),
+                           include = Stock,
+                           digits = Stock ~ 2) %>% 
+               modify_header(
+                 label = '**Nutrient**',
+                 stat_1 = '**{level}**',
+                 stat_2 = '**{level}**'
+                 ) %>%
+               add_stat_label(label = Stock ~ c("n", 
+                                                "Median\n (IQR)", 
+                                                "Min-Max")),
+             .header = "**{strata}**"
+             )
+
+tbl_stack(list(soil_tab, plant_tab, herb_tab), 
+          group_header = c("Soil", "Plants", "Herbivores"))
+```
+
+The next graph combines Figures \@ref(fig:total-stock-contrast) and 
+\@ref(fig:herbivore-contrast) to show standardized stock values 
+for each compartment. That is, for each iteration of the model, we
+divide the equilibrium C or N content of Soil, Plant, or Herbivore 
+by the total amount of C or N in the system. This allows us to see
+how each compartment compares with all others in terms of C or N
+content in relative terms across the two modeling scenarios---_with_ and 
+_without_ herbivores. Note that, unlike Figure \@ref(fig:herbivore-contrast), 
+in this graph we show the Herbivore data to confirm that the sum total of C 
+and N in the system adds up to 1. The seemingly missing 0.05 is 
+actually due to our exclusion of the top and bottom 5% of the data
+to avoid visual artifacts due to outliers. This figure appears in the Appendices
+to the manuscript as **Figure D.2**.
+
+```{r standard-herbivore-contrast, echo=TRUE, tidy=TRUE, dpi=120, fig.retina=3, layout="l-body-outset", fig.cap="Comparison of standardized nutrient content, for each trophic compartment, when Herbivores are either _present_ or _absent_. A larger share of C appears locked in Plants when herbivores are absent from the system. However, as shown in Figure 1, the overall quantity of C in the system is much smaller when Herbivores are absent. Conversely, while relatively less C is locked in Plant vs Herbivore biomass when the Herbivores are present, this is a much larger quantity in absolute terms. Similar considerations can be made for the N content of trophic compartments when Herbivores are present: while the relative content appears smaller than when the Herbivores are absent, the absolute value is actually much larger due to the larger content of N in the tri-trophic ecosystem (Figure 1).  Labels floating above the clound of points report the median content of the relevant nutrient for each trophic compartment. Note that, while this graph may make it look like Herbivores have a C:N of almost 1:1, this is not accurate---as shown in **Figure 2**."}
+# build the graph
+stdBP <- randomI %>% 
+  pivot_longer(., cols = c(Soil_Nstd:Herbivore_Cstd), 
+               names_to = "Compartment", 
+               values_to = "Stock") %>% 
+  separate(., col = "Compartment", 
+           into = c("Compartment", "Nutrient"), 
+           sep = "_") %>%
+  mutate(., Compartment = as_factor(Compartment),
+         herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, "Herbivore present" = "present", "Herbivore absent" = "absent"),
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Carbon = "Cstd", Nitrogen = "Nstd"),
+         Nutrient = fct_relevel(.f = Nutrient, sort)) %>%
+  dplyr::group_by(., herbivore, 
+                  Compartment, 
+                  Nutrient) %>% 
+  dplyr::filter(., between(Stock, 
+                        quantile(Stock, 0.05, na.rm = T), 
+                        quantile(Stock, 0.95, na.rm = T)),
+                .preserve = TRUE) %>% 
+  ggplot(., aes(x = Compartment, y = Stock, col = Compartment)) + 
+  gghalves::geom_half_boxplot(center = T, outlier.color = NA, notch = T, errorbar.draw = F, nudge = 0.025) +
+  gghalves::geom_half_point(shape = 21, alpha = 0.05, stroke = 1) +
+  # geom_boxplot(notch = T, na.rm = T, outlier.shape = NA) +
+  stat_summary(geom = "label", fun = quantile, 
+               fun.args = list(probs = 0.5), 
+               aes(label = round(after_stat(y), 2)), 
+               position = position_nudge(x = 0.19), 
+               show.legend = F, size = 2.5,
+               label.padding = unit(0.15, "lines"), 
+               label.size = 0.15,
+               fontface = "bold",
+               color = "black") + 
+  ylab("Standardised nutrient content") + 
+  scale_color_met_d("Isfahan2", direction = 1) + 
+  scale_fill_met_d("Isfahan2", direction = 1) +
+  guides(color = guide_legend(title = "Compartment", override.aes = list(alpha = 1, stroke = 1))) +
+  facet_grid(Nutrient~herbivore) +
+  theme_classic() +
+  theme(legend.position = "top",
+        text = element_text(size = 14))
+
+# ggsave(filename = "../Results/HerbivoreContrast_randomI_standardized.svg",
+#        dpi = 300, path = "../Results/", device = "svg", width = width, height = height)
+
+stdBP
+```
+
+Next, we calculate the biomass ratios for both C and N for all pairings of
+trophic compartments. Figure \@ref(fig:biomass-ratios-boxplots) below shows the values of these
+ratios, and how they compare between elements and across herbivore presence/absence conditions.
+
+```{r biomass-ratios-boxplots, echo=TRUE, tidy=TRUE, dpi=120, fig.retina=3, layout="l-body-outset", fig.cap="Comparison of biomass ratios among the two versions of the model, _with_ and _without_ herbivores. Biomass ratios computed include Herbivore:Plant, Herbivore:Soil, and Soil:Plant, for both C and N. Note that the scale of the y-axis is cutoff at a value of y = 150 to show the full extent of a majority of the boxplots, as otherwise it would be hidden by the _tail_ of outlying points stretch upwards."}
+# Since there's an extra trophic level when herbivores are present, we will first split the df by presence vs absence 
+# of herbivores, to calculate the biomass ratios correctly
+# Then, we'll merge the resulting two datasets and produce the graph
+
+# first, calculate the ratios when the herbivores are present
+presentRatios <- randomI %>% 
+  dplyr::filter(., herbivore == "present") %>%
+  dplyr::filter(.,
+                between(Soil_C,
+                        quantile(Soil_C, 0.05, na.rm = T),
+                        quantile(Soil_C, 0.95, na.rm = T)),
+                between(Soil_N,
+                        quantile(Soil_N, 0.05, na.rm = T),
+                        quantile(Soil_N, 0.95, na.rm = T)),
+                between(Plant_C,
+                        quantile(Plant_C, 0.05, na.rm = T),
+                        quantile(Plant_C, 0.95, na.rm = T)),
+                between(Plant_N,
+                        quantile(Plant_N, 0.05, na.rm = T),
+                        quantile(Plant_N, 0.95, na.rm = T)),
+                between(Herbivore_C,
+                        quantile(Herbivore_C, 0.05, na.rm = T),
+                        quantile(Herbivore_C, 0.95, na.rm = T)),
+                between(Herbivore_N,
+                        quantile(Herbivore_N, 0.05, na.rm = T),
+                        quantile(Herbivore_N, 0.95, na.rm = T))) %>%
+  dplyr::mutate(., .after = q, 
+                PS_N = Plant_N/Soil_N,
+                HP_N = Herbivore_N/Plant_N,
+                HS_N = Herbivore_N/Soil_N,
+                PS_C = Plant_C/Soil_C,
+                HP_C = Herbivore_C/Plant_C,
+                HS_C = Herbivore_C/Soil_C) %>%
+  dplyr::select(., herbivore:I, PS_N:HS_C) %>%
+  pivot_longer(., PS_N:HS_C, names_to = "RatioPair", values_to = "Ratio") %>%
+  separate(., "RatioPair", into = c("CompartmentPair", "Nutrient"), sep = "_") %>%
+  dplyr::group_by(., CompartmentPair, Nutrient)
+
+# then when the herbivores are absent
+absentRatios <- randomI %>% 
+  dplyr::filter(., herbivore == "absent") %>%
+  dplyr::filter(., 
+                between(Soil_C, 
+                        quantile(Soil_C, 0.05, na.rm = T), 
+                        quantile(Soil_C, 0.95, na.rm = T)), 
+                between(Soil_N, 
+                        quantile(Soil_N, 0.05, na.rm = T), 
+                        quantile(Soil_N, 0.95, na.rm = T)), 
+                between(Plant_C, 
+                        quantile(Plant_C, 0.05, na.rm = T), 
+                        quantile(Plant_C, 0.95, na.rm = T)),
+                between(Plant_N, 
+                        quantile(Plant_N, 0.05, na.rm = T), 
+                        quantile(Plant_N, 0.95, na.rm = T))) %>%
+  dplyr::mutate(., .after = q, 
+                PS_N = Plant_N/Soil_N,
+                PS_C = Plant_C/Soil_C) %>%
+  dplyr::select(., herbivore:I, PS_N:PS_C) %>%
+  pivot_longer(., PS_N:PS_C, names_to = "RatioPair", values_to = "Ratio") %>%
+  separate(., "RatioPair", into = c("CompartmentPair", "Nutrient"), sep = "_") %>%
+  dplyr::group_by(., CompartmentPair, Nutrient) 
+
+# now bind the two dataframes together and plot the results
+bind_rows(presentRatios, absentRatios) %>%
+  mutate(., herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, "Herbivore present" = "present", 
+                                "Herbivore absent" = "absent"),
+         CompartmentPair = as_factor(CompartmentPair),
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C")) %>%
+  ggplot(., aes(x = CompartmentPair, y = Ratio, col = Nutrient)) + 
+  # geom_boxplot(outlier.shape = 21, outlier.fill = NA,  
+  #              outlier.alpha = 1, notch = T, alpha = 0.05) + 
+  gghalves::geom_half_boxplot(center = T, outlier.color = NA, notch = T, errorbar.draw = F, nudge = 0.02) +
+  gghalves::geom_half_point(shape = 21, alpha = 0.1) +
+  scale_color_met_d("Egypt", direction = 1) + 
+  scale_x_discrete(labels = c("HP" = "Herbivore:Plant", 
+                              "HS" = "Herbivore:Soil", 
+                              "PS" = "Plant:Soil")) +
+  xlab("Biomass ratio") +
+  ylab(" ") +
+  facet_wrap(.~herbivore, scale = "free") + 
+  coord_cartesian(ylim = c(0, 150)) +
+  theme(legend.position = "top")
+
+# ggsave(filename = "../Results/BiomassRatios.svg", 
+#        device = "svg", dpi = 300, width = 8, height = 4)
+```
+
+The table below, shows the mean values of each biomass ratio shown in 
+panel (a) of Figure \@ref(fig:biomass-ratios-boxplots).
+
+```{r biomass-ratios-mean-table-present, echo=TRUE, tidy=TRUE}
+randomI %>% 
+  dplyr::filter(., herbivore == "present") %>%
+  dplyr::filter(.,
+                between(Soil_C,
+                        quantile(Soil_C, 0.05, na.rm = T),
+                        quantile(Soil_C, 0.95, na.rm = T)),
+                between(Soil_N,
+                        quantile(Soil_N, 0.05, na.rm = T),
+                        quantile(Soil_N, 0.95, na.rm = T)),
+                between(Plant_C,
+                        quantile(Plant_C, 0.05, na.rm = T),
+                        quantile(Plant_C, 0.95, na.rm = T)),
+                between(Plant_N,
+                        quantile(Plant_N, 0.05, na.rm = T),
+                        quantile(Plant_N, 0.95, na.rm = T)),
+                between(Herbivore_C,
+                        quantile(Herbivore_C, 0.05, na.rm = T),
+                        quantile(Herbivore_C, 0.95, na.rm = T)),
+                between(Herbivore_N,
+                        quantile(Herbivore_N, 0.05, na.rm = T),
+                        quantile(Herbivore_N, 0.95, na.rm = T))) %>%
+  dplyr::mutate(., .after = q, 
+                PS_N = Plant_N/Soil_N,
+                HP_N = Herbivore_N/Plant_N,
+                HS_N = Herbivore_N/Soil_N,
+                PS_C = Plant_C/Soil_C,
+                HP_C = Herbivore_C/Plant_C,
+                HS_C = Herbivore_C/Soil_C) %>%
+  dplyr::select(., herbivore:I, PS_N:HS_C) %>%
+  pivot_longer(., PS_N:HS_C, 
+               names_to = "RatioPair", values_to = "Ratio") %>%
+  separate(., "RatioPair", 
+           into = c("CompartmentPair", "Nutrient"), sep = "_") %>%
+  tbl_strata(
+    strata = CompartmentPair,
+    .tbl_fun = 
+      ~.x %>%
+      tbl_summary(by = Nutrient,
+              type = Ratio ~ "continuous",
+              statistic = Ratio ~ c("{mean}
+                                    ({sd})"),
+              digits = Ratio ~ 2,
+              include = Ratio) %>%
+      modify_header(
+                 label = '**Nutrient**',
+                 stat_1 = '**{level}**',
+                 stat_2 = '**{level}**'
+                 ) %>%
+      add_stat_label(label = Ratio ~ c("Mean\n (SD)")),
+    .header = "**{strata}**"
+  ) 
+```
+
+For comparison, the table below shows the mean (sd) value of the Soil:Plant 
+biomass ratio for C and N for panel (b) of Figure \@ref(fig:biomass-ratios-boxplots).
+
+```{r biomass-ratios-mean-table-absent, echo=TRUE, tidy=TRUE}
+randomI %>% 
+  dplyr::filter(., herbivore == "absent") %>%
+  dplyr::filter(.,
+                between(Soil_C,
+                        quantile(Soil_C, 0.05, na.rm = T),
+                        quantile(Soil_C, 0.95, na.rm = T)),
+                between(Soil_N,
+                        quantile(Soil_N, 0.05, na.rm = T),
+                        quantile(Soil_N, 0.95, na.rm = T)),
+                between(Plant_C,
+                        quantile(Plant_C, 0.05, na.rm = T),
+                        quantile(Plant_C, 0.95, na.rm = T)),
+                between(Plant_N,
+                        quantile(Plant_N, 0.05, na.rm = T),
+                        quantile(Plant_N, 0.95, na.rm = T))) %>%
+  dplyr::mutate(., .after = q, 
+                PS_N = Plant_N/Soil_N,
+                PS_C = Plant_C/Soil_C) %>%
+  dplyr::select(., herbivore:I, PS_N:PS_C) %>%
+  pivot_longer(., PS_N:PS_C, names_to = "RatioPair", 
+               values_to = "Ratio") %>%
+  separate(., "RatioPair", 
+           into = c("CompartmentPair", "Nutrient"), sep = "_") %>%
+  tbl_strata(
+    strata = CompartmentPair,
+    .tbl_fun = 
+      ~.x %>%
+      tbl_summary(by = Nutrient,
+              type = Ratio ~ "continuous",
+              statistic = Ratio ~ c("{mean} ({sd})"),
+              digits = Ratio ~ 2,
+              include = Ratio) %>%
+      modify_header(
+                 label = '**Nutrient**',
+                 stat_1 = '**{level}**',
+                 stat_2 = '**{level}**'
+                 )  %>%
+      add_stat_label(label = Ratio ~ c("Mean\n (SD)")),
+    .header = "**{strata}**"
+  ) 
+```
+
+Figure \@ref(fig:params-plots) below shows the values of the parameters in the 
+model, comparing between the _with_ and _without_ herbivores treatments. 
+
+```{r params-plots, echo=TRUE, tidy=TRUE, layout="l-body-outset", dpi=120, fig.retina=3, layout="l-body-outset", fig.cap="Parameter values across the model's equations, for both the version _with_ and _without_ herbivores. The first two rows contain parameters shared across the two versions of the model. The bottom row contains parameters exclusive to the model _with_ the Herbivore. Comparing between the two versions of the model, values for parameters _a~P~_ and _q~S~_ appear to be acting in opposite ways in the two versions of the model. Labels floating above the clound of points report the median value of each parameter, for the two version of the model. Note (i) the different y-axis scales, (ii) that we removed the top and bottom 5% of the stock values for Soil C, N, and Plant C, N, before plotting to avoid graphic artefacts, and (iii) that we do not show the inorganic nutrient leaching rate as its value is fixed to _k_ = 0.5."}
+
+randomIparams <- randomI %>% 
+  dplyr::filter(., 
+                between(Soil_C, 
+                        quantile(Soil_C, 0.05, na.rm = T), 
+                        quantile(Soil_C, 0.95, na.rm = T)), 
+                between(Soil_N, 
+                        quantile(Soil_N, 0.05, na.rm = T), 
+                        quantile(Soil_N, 0.95, na.rm = T)), 
+                between(Plant_C, 
+                        quantile(Plant_C, 0.05, na.rm = T), 
+                        quantile(Plant_C, 0.95, na.rm = T)),
+                between(Plant_N, 
+                        quantile(Plant_N, 0.05, na.rm = T), 
+                        quantile(Plant_N, 0.95, na.rm = T))) %>%
+  dplyr::select(., c(TIME, herbivore, I, ap, q, ah, rh, β, π, α, δ, rp))
+
+design <- "
+    ABC# 
+    HIJ#
+    DEFG
+"
+
+randomIparams %>%
+  pivot_longer(., cols = !c(herbivore, TIME), 
+               names_to = "Parameter", 
+               values_to = "Value") %>% 
+  mutate(., herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, Present = "present", Absent = "absent"),
+         Parameter = case_when(Parameter %in% "ah" ~ "a[H]",
+                               Parameter %in% "rh" ~ "r[H]",
+                               Parameter %in% "ap" ~ "a[P]",
+                               Parameter %in% "rp" ~ "r[P]",
+                               Parameter %in% "q" ~ "q[S]",
+                               Parameter %in% "α" ~ "\u03B1",
+                               Parameter %in% "β" ~ "\u03B2",
+                               Parameter %in% "δ" ~ "\u03B4",
+                               Parameter %in% "π" ~ "\u03C0",
+                               TRUE ~ as.character(Parameter)),
+         Parameter = as_factor(Parameter)) %>%
+  dplyr::group_by(., herbivore, 
+                  Parameter) %>% 
+  ggplot(., aes(x = herbivore, y = Value, col = herbivore)) + 
+  gghalves::geom_half_boxplot(center = T, outlier.color = NA, notch = T, errorbar.draw = F, nudge = 0.05) +
+  gghalves::geom_half_point(shape = 21, alpha = 0.05) +
+  # geom_boxplot(notch = T, na.rm = T, outlier.shape = NA) +
+  xlab("Herbivore presence/absence") +
+  ylab("Parameter values") +
+  stat_summary(geom = "label",
+               fun = quantile,
+               fun.args = list(probs = 0.5),
+               aes(label = round(after_stat(y), 2)),
+               size = 2.5, orientation = "x",
+               label.padding = unit(0.15, "lines"),
+               position = position_nudge(x = 0.19),
+               label.size = 0.15,
+               fontface = "bold",
+               color = "black") +
+  scale_color_met_d("Egypt", direction = 1) +
+  facet_manual(Parameter~.,
+             scales = "free_y",
+             design = design,
+             # axes = "all",
+             labeller = label_parsed) +
+  theme_classic() +
+  theme(legend.position = "none")
+
+# ggsave(filename = "../Results/ParameterValues_randomI.svg", 
+#        device = "svg", dpi = 300, height = 7, width = 6)
+```
+
+It would appear that the two parameters _a~p~_ and _q_ act in somewhat opposite 
+ways in the two versions of the model, with median _q_ being fairly high when 
+herbivores are present in the model while _a~p~_ is much reduced. Conversely, 
+_without_ herbivores, these two parameters have fairly comparable median values.
+It is also interesting to note that parameter _π_ (herbivore respiration rate) 
+appears to be generally stable around a fairly high value of 
+**`r prettyNum(median(randomIparams$π, na.rm = T), digits = 3)`**, meaning more 
+C is respired by the herbivores than returns to the soil in organic form through
+excretion/egestion. 
+
+```{r params-tab, echo=TRUE,tidy=TRUE}
+randomI %>% 
+  dplyr::filter(., 
+                between(Soil_C, 
+                        quantile(Soil_C, 0.05, na.rm = T), 
+                        quantile(Soil_C, 0.95, na.rm = T)), 
+                between(Soil_N, 
+                        quantile(Soil_N, 0.05, na.rm = T), 
+                        quantile(Soil_N, 0.95, na.rm = T)), 
+                between(Plant_C, 
+                        quantile(Plant_C, 0.05, na.rm = T), 
+                        quantile(Plant_C, 0.95, na.rm = T)),
+                between(Plant_N, 
+                        quantile(Plant_N, 0.05, na.rm = T), 
+                        quantile(Plant_N, 0.95, na.rm = T))) %>%
+  dplyr::group_by(., herbivore) %>%
+  dplyr::summarise(., 
+                   dplyr::across(.cols = c(I:k, α:q), 
+                                 list(Mean = mean, 
+                                      SD = sd))) %>%
+  pivot_longer(., 
+               cols = c(I_Mean:q_SD), 
+               names_to = "parameter", 
+               values_to = "value") %>%
+  separate(., 
+           parameter, 
+           into = c("Parameter", 
+                    "Metric"), 
+           sep = "_") %>% 
+  mutate(., herbivore = as_factor(herbivore),
+         Parameter = case_when(Parameter %in% "ah" ~ "a@H~",
+                               Parameter %in% "rh" ~ "r@H~",
+                               Parameter %in% "ap" ~ "a@P~",
+                               Parameter %in% "rp" ~ "r@P~",
+                               Parameter %in% "α" ~ "\u03B1",
+                               Parameter %in% "β" ~ "\u03B2",
+                               Parameter %in% "δ" ~ "\u03B4",
+                               Parameter %in% "π" ~ "\u03C0",
+                               TRUE ~ as.character(Parameter)),
+         Parameter = as_factor(Parameter),
+         PrmEqn = ifelse(Parameter == "I" |
+                         Parameter == "k" |
+                         Parameter == "q",
+                         "Soil", ifelse(Parameter == "\u03B1" |
+                                        Parameter == "\u03B4" |
+                                        Parameter == "a@P~" |
+                                        Parameter == "r@P~",
+                                        "Plant", "Herbivore")),
+         PrmEqn = as_factor(PrmEqn)) %>%
+  pivot_wider(., 
+              id_cols = c(PrmEqn, Parameter), 
+              names_from = c(Metric, herbivore),
+              values_from = value) %>% 
+  gt(groupname_col = "PrmEqn") %>% 
+  tab_spanner(label = md("**Herbivore absent**"), 
+              columns = c("Mean_absent", "SD_absent")) %>%
+  tab_spanner(label = md("**Herbivore present**"), 
+              columns = c("Mean_present", "SD_present")) %>%
+  cols_label(PrmEqn = "Compartment",
+             Parameter = "Parameter", 
+             "Mean_absent" = "Mean", 
+             "SD_absent" = "SD", 
+             "Mean_present" = "Mean", 
+             "SD_present" = "SD") %>%
+  fmt_number(columns = c(3:6), decimals = 2) %>%
+  cols_align_decimal() %>%
+  sub_missing() %>%
+  text_transform(
+    locations = cells_body(),
+    fn = function(x) {
+      str_replace_all(x,
+                      pattern = "@",
+                      replacement = "<sub>") %>% 
+        str_replace_all("~",
+                        "</sub>") }
+  ) %>%
+  tab_caption(caption = md("Mean and standard deviation (SD) for all parameters in the two versions of the model."))
+```
+
+Next, we will produce graphs to investigate [Relative Parameter Importance] for 
+each parameter in the model in determining the results of the model simulations.
+These graphs will use the results from the [Global Sensitivity Analysis] 
+performed above, converted into a relative measure of each parameter importance
+in the model (sensu @Harper2011;@Bellmore2014). 
+
+## Relative Parameter Importance
+
+The graphs below (Figures \@ref(fig:gsa-herbivore-model-plot) and 
+\@ref(fig:gsa-no-herbivore-model-plot)) show the relative importance of each 
+parameter in the model for the _herbivore_ and _non-herbivore_ versions of the 
+model, respectively. 
+
+```{r gsa-herbivore-model-plot, echo=TRUE, tidy=TRUE, fig.height=6, fig.width=8, fig.cap="Relative importance of parameters for each trophic compartment's equilibrium content of N and C in the model _with_ herbivores. Parameters on the y-axis are grouped based on the trophic compartment they are related to (e.g., r~P~, a~P~, δ, and α all refer to the Plant trophic compartment and thus are colored in green). Notice how, for C dynamics, we see evidence of indirect effects of the Herbivores on Soil C stocks, as shown by parameters a~H~, r~H~, and π---the herbivore's attack, recycling, and respiration rates, respectively---surpassing the relative importance of the corresponding plant parameters (i.e., a~P~, r~P~, and δ)."}
+# plotting pipe
+herbGSAplot <- herbGSA %>% 
+  # separate column SV (State Variable) into its components, i.e., Compartment and Nutrient
+  separate(., col = SV, into = c("Compartment", "Nutrient"), sep = "_") %>% 
+  # create a new column, Eqn, to track which equation the parameters 
+  # originate from, which will be used to group them along the y-axis 
+  # then, make sure columns Compartment, Nutrient, and Eqn are factors
+  # finally, reorder column Parameter so along the values of Relative Importance 
+  # and grouped by Eqn
+  mutate(., Eqn = ifelse(Parameter == "I" |
+                         Parameter == "k" |
+                         Parameter == "q",
+                         "Soil", ifelse(Parameter == "α" |
+                                        Parameter == "δ" |
+                                        Parameter == "ap" |
+                                        Parameter == "rp",
+                                        "Plant", "Herbivore")),
+         Compartment = as_factor(Compartment),
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Eqn = as_factor(Eqn),
+         Parameter = fct_reorder2(.f = Parameter, .x = RelImpI, .y = Eqn)) %>% 
+  # now, lets build the plot
+  group_by(., Nutrient, Compartment) %>%
+  ggplot(., aes(x = RelImpI, y = Parameter)) + 
+  geom_col(aes(fill = Eqn, group = Eqn), col = "black", linewidth = 0.25, alpha = 0.75) +
+  scale_fill_met_d(name = "Isfahan2", direction = 1) +
+  xlab("Relative Importance Index") + 
+  ylab(" ") +
+  facet_grid2(Nutrient~Compartment) +
+  theme_classic() +
+  theme(legend.position = "top",
+        legend.title = element_blank(),
+        text = element_text(size = 14),
+        panel.spacing = unit(0.75, "lines"))
+
+# modify the y axis to show the proper subscripts
+herbGSAplot2 <- herbGSAplot + 
+  coord_flip() +
+  scale_y_discrete("Parameter", 
+                   labels = c("β", "π", 
+                              expression(a[H]), expression(r[H]), 
+                              "α", "δ", expression(a[P]), 
+                              expression(r[P]), "I", "k",
+                              expression(q[S]))) 
+
+# ggsave(plot = herbGSAplot2, 
+#        filename = "../Results/HerbivoreGSA_Results.svg", 
+#        device = "svg", dpi = 300, width = 10, height = 6)
+
+herbGSAplot2
+```
+
+```{r gsa-no-herbivore-model-plot, echo=TRUE, tidy=TRUE, fig.height=6, fig.width=6, fig.cap="Relative importance of parameters for each trophic compartment's equilibrium content of N and C in the model _without_ herbivores. Parameters on the y-axis are grouped and coloured based on the trophic compartment they refer to."}
+Isfahan2_2cols <- met.brewer("Isfahan2", 3)[-3]
+
+# plotting pipe
+noherbGSAplot <- noherbGSA %>% 
+  # separate column SV (State Variable) into its components, i.e., Compartment and Nutrient
+  separate(., col = SV, into = c("Compartment", "Nutrient"), sep = "_") %>% 
+  # create a new column, Eqn, to track which equation the parameters originate from, 
+  # which will be used to group them along the y-axis 
+  # then, make sure columns Compartment, Nutrient, and Eqn are factors
+  # finally, reorder column Parameter so along the values of Relative 
+  # Importance and grouped by Eqn
+  mutate(., Eqn = ifelse(Parameter == "I" |
+                         Parameter == "k" |
+                         Parameter == "q",
+                         "Soil", "Plant"),
+         Compartment = as_factor(Compartment),
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Eqn = as_factor(Eqn),
+         Parameter = fct_reorder2(.f = Parameter, .x = RelImpI, .y = Eqn)) %>% 
+  # now, lets build the plot
+  ggplot(., aes(x = RelImpI, y = Parameter)) + 
+  geom_col(aes(fill = Eqn, group = Eqn), col = "black", linewidth = 0.25, alpha = 0.75) +
+  scale_fill_manual(values = Isfahan2_2cols) +
+  xlab("Relative Importance Index") +
+  ylab(" ") +
+  facet_grid2(Nutrient~Compartment) +
+  theme_classic() +
+  theme(legend.position = "top",
+        legend.title = element_blank(),
+        text = element_text(size = 14),
+        panel.spacing = unit(1, "lines"))
+
+# modify the y axis to show the proper subscripts
+noherbGSAplot2 <- noherbGSAplot + 
+  coord_flip() +
+  scale_y_discrete("Parameter", 
+                   labels = c(expression(a[P]), expression(r[P]), 
+                              "α", "δ",
+                              "I", "k", expression(q[S])))
+
+# ggsave(plot = noherbGSAplot2, 
+#        filename = "../Results/noHerbivoreGSA_Results.svg",
+#        device = "svg", dpi = 300)
+
+noherbGSAplot2
+```
+
+Similarly, Figure \@ref(fig:gsa-prim-prod-plot) below shows how, for each 
+scenario (_with_ vs _without_ herbivores) the model's parameters shape estimates
+of primary productivity for nitrogen and carbon, respectively.
+
+```{r gsa-prim-prod-plot, echo=TRUE, tidy=TRUE, fig.cap="Comparing the Relative Importance of each parameter in the formulae used to calculate [Primary Productivity], in the model _with_ and _without_ herbivores, for Nitrogen (panel (a)) and Carbon (panel (b))."}
+
+# nitrogen
+PPGSAres <- bind_rows(ranked_imp_PPherb, ranked_imp_PPnoherb, .id = "herbivore")
+
+# plotting pipe
+PPGSAplot <- PPGSAres %>% 
+  # create a new column, Eqn, to track which equation the parameters 
+  # originate from, which will be used to group them along the y-axis 
+  # then, make sure columns Compartment, Nutrient, and Eqn are factors
+  # finally, reorder column Parameter so along the values of Relative Importance 
+  # and grouped by Eqn
+  mutate(., Eqn = ifelse(Parameter == "q",
+                         "Soil", ifelse(Parameter == "α" |
+                                        Parameter == "δ" |
+                                        Parameter == "ap" |
+                                        Parameter == "rp",
+                                        "Plant", "Herbivore")),
+         Eqn = as_factor(Eqn),
+         Eqn = fct_relevel(.f = Eqn, "Herbivore", "Plant", "Soil"),
+         herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, "Present" = "1", "Absent" = "2"),
+         herbivore = fct_relevel(.f = herbivore, "Absent", "Present"),
+         Parameter = fct_reorder2(.f = Parameter, .x = RelImpI, .y = Eqn, .desc = FALSE)) %>% 
+  # now, lets build the plot
+  # group_by(., herbivore) %>%
+  ggplot(., aes(x = RelImpI, y = Parameter)) + 
+  geom_col(aes(fill = Eqn, color = Eqn, group = herbivore, alpha = herbivore), position = position_dodge()) +
+  scale_fill_met_d(name = "Isfahan2", direction = -1) +
+  scale_color_met_d(name = "Isfahan2", direction = -1) +
+  xlab("Relative Importance Index") + 
+  ylab(" ") +
+  labs(fill = "Trophic\nCompartment", alpha = "Herbivore") +
+  theme(legend.position = "right",
+        text = element_text(size = 14)) +
+  guides(color = "none")
+
+# modify the y axis to show the proper subscripts
+PPGSAplot2 <- PPGSAplot + 
+  # ggtitle("Primary Production (Nitrogen)") +
+  coord_flip() +
+  scale_y_discrete("Parameter", 
+                   labels = c("β", "π", 
+                              expression(a[H]), expression(r[H]), 
+                              "α", "δ", expression(a[P]), 
+                              expression(r[P]),
+                              expression(q[S]))) +
+  theme(panel.grid.major.y = element_line(linetype = 2))
+
+# ggsave(plot = PPGSAplot2,
+#        filename = "../Results/PrimaryProductivity_RI.svg",
+#        device = "svg", dpi = 300)
+
+# PPGSAplot2
+
+# carbon
+PPGSAresC <- bind_rows(ranked_imp_PPherbc, ranked_imp_PPnoherbc, .id = "herbivore")
+
+# plotting pipe
+PPGSAplot3 <- PPGSAresC %>% 
+  # create a new column, Eqn, to track which equation the parameters 
+  # originate from, which will be used to group them along the y-axis 
+  # then, make sure columns Compartment, Nutrient, and Eqn are factors
+  # finally, reorder column Parameter so along the values of Relative Importance 
+  # and grouped by Eqn
+  mutate(., Eqn = ifelse(Parameter == "q",
+                         "Soil", ifelse(Parameter == "α" |
+                                        Parameter == "δ" |
+                                        Parameter == "ap" |
+                                        Parameter == "rp",
+                                        "Plant", "Herbivore")),
+         Eqn = as_factor(Eqn),
+         Eqn = fct_relevel(.f = Eqn, "Herbivore", "Plant", "Soil"),
+         herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, "Present" = "1", "Absent" = "2"),
+         herbivore = fct_relevel(.f = herbivore, "Absent", "Present"),
+         Parameter = fct_reorder2(.f = Parameter, .x = RelImpI, .y = Eqn, .desc = FALSE)) %>% 
+  # now, lets build the plot
+  # group_by(., herbivore) %>%
+  ggplot(., aes(x = RelImpI, y = Parameter)) + 
+  geom_col(aes(fill = Eqn, color = Eqn, group = herbivore, alpha = herbivore), position = position_dodge()) +
+  scale_fill_met_d(name = "Isfahan2", direction = -1) +
+  scale_color_met_d(name = "Isfahan2", direction = -1) +
+  xlab("Relative Importance Index") + 
+  ylab(" ") +
+  labs(fill = "Trophic\nCompartment", alpha = "Herbivore") +
+  theme(legend.position = "right",
+        text = element_text(size = 14)) +
+  guides(color = "none")
+
+# modify the y axis to show the proper subscripts
+PPGSAplot4 <- PPGSAplot3 + 
+  # ggtitle("Primary Production (Carbon)") +
+  coord_flip() +
+  scale_y_discrete("Parameter", 
+                   labels = c("β", "π", 
+                              expression(a[H]), expression(r[H]), 
+                              "α", "δ", expression(a[P]), 
+                              expression(r[P]),
+                              expression(q[S]))) +
+  theme(panel.grid.major.y = element_line(linetype = 2)) 
+
+# ggsave(plot = PPGSAplot2,
+#        filename = "../Results/PrimaryProductivityC_RI.svg",
+#        device = "svg", dpi = 300)
+
+PPGSAplot2 + PPGSAplot4 + plot_layout(guides = "collect") + plot_annotation(tag_levels = "a", tag_prefix = "(", tag_suffix = ")") & theme(legend.position = "bottom")
+```
+
+## Herbivore influence on ecosystem functions 
+
+Here we analyse graphically the effects of herbivores on three ecosystem 
+functions; namely, [Primary producers biomass accumulation], 
+[Primary Productivity], and [Net Ecosystem Carbon Balance].
+
+### Primary producers biomass accumulation
+
+The graph below shows the results for the change in Plant Biomass as a function 
+of _a~H~_.
+
+```{r plant-biomass-pd-ah, echo=TRUE, tidy=TRUE}
+plantBpdah <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, ah, Plant_N_ah,Plant_C_ah) %>%
+  pivot_longer(., cols = c(Plant_N_ah:Plant_C_ah), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient", "Variable"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  dplyr::group_by(., Nutrient) %>%
+  # filter the top and bottom 5% of data points to remove outliers
+  dplyr::filter(., 
+                between(Biomass,
+                        quantile(Biomass, 0.05, na.rm = T),
+                        quantile(Biomass, 0.95, na.rm = T)),
+                .preserve = TRUE) %>%
+  ggplot(., aes(x = ah, y = Biomass)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.1, color = "#00BFC4") +
+  geom_line(aes(y = 0), lty = 2) +
+  geom_smooth(color = "black", se = T) +
+  ylab(expression(paste(partialdiff,P^{"*"}," / ",partialdiff,a[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  ggtitle("Change in Plant C and N content with Herbivore attack rate") +
+  facet_wrap(.~Nutrient, scales = "free")
+
+#ggsave(filename = "../Results/BiomassPD_ah.svg", device = "svg", dpi = 300, width = width, height = height)
+
+plantBpdah
+```
+
+The data in \@ref(fig:plant-biomass-pd-ah) are quite spread out, so the next graph
+zooms in on the region around the `y = 0` line. Note that we removed the trend
+line in this next figure because using function `coord_cartesian()` simply zooms
+the plot but does not change the data underlying it, which causes some graphical
+artefacts in the trend line.
+
+```{r plant-biomass-pd-ah-zoom, echo=TRUE,tidy=TRUE}
+PlantCPDzoom <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, ah, Plant_N_ah,Plant_C_ah) %>%
+  pivot_longer(., cols = c(Plant_N_ah:Plant_C_ah), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient", "Variable"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  dplyr::filter(., Nutrient == "Carbon") %>%
+  ggplot(., aes(x = ah, y = Biomass)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(expression(paste(partialdiff,P[C]^{"*"}," / ",partialdiff,a[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  ggtitle("Carbon") +
+  coord_cartesian(ylim = c(-50, 50)) 
+
+# PlantCPDzoom
+
+PlantNPDzoom <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, ah, Plant_N_ah,Plant_C_ah) %>%
+  pivot_longer(., cols = c(Plant_N_ah:Plant_C_ah), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient", "Variable"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  dplyr::filter(., Nutrient == "Nitrogen") %>%
+  ggplot(., aes(x = ah, y = Biomass)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  geom_line(aes(y = 0), lty = 2) +
+  # geom_smooth(color = "#F8766D") +
+  ylab(expression(paste(partialdiff,P[N]^{"*"}," / ",partialdiff,a[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  ggtitle("Nitrogen") +
+  coord_cartesian(ylim = c(-.5, .5)) 
+
+# PlantNPDzoom
+
+PlantCPDzoom + PlantNPDzoom + plot_annotation(title = "Change in Plant C and N content with Herbivore attack rate", tag_levels = "a", tag_prefix = "(", tag_suffix = ")")
+
+#ggsave(filename = "../Results/BiomassPD_ah_zoom.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+Next, we are plotting the value of Plant Biomass at equilibrium ( _P^*^_ ) against
+the values of parameter _a~H~_.
+
+```{r plant-biomass-eq-ah, echo=TRUE, tidy=TRUE}
+EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, ah, Plant_N, Plant_C) %>%
+  pivot_longer(., cols = c(Plant_N:Plant_C), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  group_by(., Nutrient) %>%
+  ggplot(., aes(x = ah, y = Biomass)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.1, color = "#00BFC4") +
+  geom_smooth(color = "black") +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(expression(paste(P^{"*"}))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  ggtitle("Plant C and N content at equilibrium against Herbivore attack rate") +
+  facet_wrap(.~Nutrient, scales = "free")
+
+#ggsave(filename = "../Results/Biomass_ah.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+And, again, a zoomed-in version to get a better idea of what is going on around 
+the `y = 0` line.
+
+```{r plant-biomass-eq-ah-zoom, echo=TRUE, tidy=TRUE}
+PlantCzoom <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, ah, Plant_N,Plant_C) %>%
+  pivot_longer(., cols = c(Plant_N:Plant_C), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  dplyr::filter(., Nutrient == "Carbon") %>%
+  ggplot(., aes(x = ah, y = Biomass)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  geom_line(aes(y = 0), lty = 2) +
+  # geom_smooth(color = "#F8766D") +
+  ylab(expression(paste(P[C]^{"*"}))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  ggtitle("Carbon") +
+  coord_cartesian(ylim = c(0, 500)) 
+
+# PlantCzoom
+
+PlantNzoom <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, ah, Plant_N,Plant_C) %>%
+  pivot_longer(., cols = c(Plant_N:Plant_C), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  dplyr::filter(., Nutrient == "Nitrogen") %>%
+  ggplot(., aes(x = ah, y = Biomass)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  geom_line(aes(y = 0), lty = 2) +
+  # geom_smooth(color = "#F8766D") +
+  ylab(expression(paste(P[N]^{"*"}))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  ggtitle("Nitrogen") +
+  coord_cartesian(ylim = c(0, 10)) 
+
+# PlantNzoom
+
+PlantCzoom + PlantNzoom + plot_annotation(title = "Plant C and N content at equilibrium against Herbivore attack rate", tag_levels = "a", tag_prefix = "(", tag_suffix = ")")
+
+#ggsave(filename = "../Results/Biomass_ah_zoom.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+Now, we move on to the results of the Plant biomass partial deriative with 
+respect to _r~H~_, the herbivores' recycling rate.
+
+```{r plant-biomass-pd-rh, echo=TRUE, tidy=TRUE}
+plantBpdrh <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, rh, Plant_N_rh, Plant_C_rh) %>%
+  pivot_longer(., cols = c(Plant_N_rh:Plant_C_rh), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient", "Variable"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  dplyr::group_by(., Nutrient) %>%
+  # filter the top and bottom 5% of data points to remove outliers
+  dplyr::filter(., 
+                between(Biomass,
+                        quantile(Biomass, 0.05, na.rm = T),
+                        quantile(Biomass, 0.95, na.rm = T)),
+                .preserve = TRUE) %>%
+  ggplot(., aes(x = rh, y = Biomass)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.1, color = "#00BFC4") +
+  geom_line(aes(y = 0), lty = 2) +
+  geom_smooth(color = "black") +
+  ylab(expression(paste(partialdiff,P^{"*"},"/",partialdiff,r[H]))) +
+  xlab(expression(Recycling~rate~(r[H]))) +
+  ggtitle("Change in Plant C and N content with Herbivore recycling rate") +
+  facet_wrap(.~Nutrient, scales = "free")
+
+#ggsave(filename = "../Results/BiomassPD_rh.svg", device = "svg", dpi = 300, width = width, height = height)
+
+plantBpdrh
+```
+
+As before, let us zoom in the region of the graph around the `y = 0` line.
+
+```{r plant-biomass-pd-rh-zoom, echo=TRUE,tidy=TRUE}
+PlantCPDzoom <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, rh, Plant_N_rh,Plant_C_rh) %>%
+  pivot_longer(., cols = c(Plant_N_rh:Plant_C_rh), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient", "Variable"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  dplyr::filter(., Nutrient == "Carbon") %>%
+  ggplot(., aes(x = rh, y = Biomass)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  geom_line(aes(y = 0), lty = 2) +
+  # geom_smooth(color = "#F8766D") +
+  ylab(expression(paste(partialdiff,P[C]^{"*"}," / ",partialdiff,r[H]))) +
+  xlab(expression(Recycling~rate~(r[H]))) +
+  ggtitle("Carbon") +
+  coord_cartesian(ylim = c(-1, 50)) 
+
+# PlantCPDzoom
+
+PlantNPDzoom <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, rh, Plant_N_rh,Plant_C_rh) %>%
+  pivot_longer(., cols = c(Plant_N_rh:Plant_C_rh), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient", "Variable"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  dplyr::filter(., Nutrient == "Nitrogen") %>%
+  ggplot(., aes(x = rh, y = Biomass)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  geom_line(aes(y = 0), lty = 2) +
+  # geom_smooth(color = "#F8766D") +
+  ylab(expression(paste(partialdiff,P^{"*"}," / ",partialdiff,r[H]))) +
+  xlab(expression(Recycling~rate~(r[H]))) +
+  ggtitle("Nitrogen") +
+  coord_cartesian(ylim = c(-0.05, 0.5)) 
+
+# PlantNPDzoom
+
+PlantCPDzoom + PlantNPDzoom + plot_annotation(title = "Change in Plant C and N content with Herbivore recycling rate", tag_levels = "a", tag_prefix = "(", tag_suffix = ")")
+
+#ggsave(filename = "../Results/BiomassPD_rh_zoom.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+Next, we show the equilibrium values of Plant biomass against _r~H~_.
+
+```{r plant-biomass-eq-rh, echo=TRUE, tidy=TRUE}
+EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, rh, Plant_N, Plant_C) %>%
+  pivot_longer(., cols = c(Plant_N:Plant_C), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  group_by(., Nutrient) %>%
+  ggplot(., aes(x = rh, y = Biomass)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.1, color = "#00BFC4") +
+  geom_smooth(color = "black") +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(expression(paste(P^{"*"}))) +
+  xlab(expression(Recycling~rate~(r[H]))) +
+  ggtitle("Plant C and N content at equilibrium against Herbivore recycling rate") +
+  facet_wrap(.~Nutrient, scales = "free")
+
+#ggsave(filename = "../Results/Biomass_rh.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+As before, the data are very much squashed against the x-axis, so we will zoom
+in once again to better visualize the `y = 0` region.
+
+```{r plant-biomass-eq-rh-zoom, echo=TRUE,tidy=TRUE}
+PlantCPDzoom <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, rh, Plant_N,Plant_C) %>%
+  pivot_longer(., cols = c(Plant_N:Plant_C), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  dplyr::filter(., Nutrient == "Carbon") %>%
+  ggplot(., aes(x = rh, y = Biomass)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  geom_line(aes(y = 0), lty = 2) +
+  # geom_smooth(color = "#F8766D") +
+  ylab(expression(paste(P[C]^{"*"}))) +
+  xlab(expression(Recycling~rate~(r[H]))) +
+  ggtitle("Carbon") +
+  coord_cartesian(ylim = c(-1, 500)) 
+
+# PlantCPDzoom
+
+PlantNPDzoom <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, rh, Plant_N, Plant_C) %>%
+  pivot_longer(., cols = c(Plant_N:Plant_C), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  dplyr::filter(., Nutrient == "Nitrogen") %>%
+  ggplot(., aes(x = rh, y = Biomass)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  geom_line(aes(y = 0), lty = 2) +
+  # geom_smooth(color = "#F8766D") +
+  ylab(expression(paste(P^{"*"}))) +
+  xlab(expression(Recycling~rate~(r[H]))) +
+  ggtitle("Nitrogen") +
+  coord_cartesian(ylim = c(0, 10)) 
+
+# PlantNPDzoom
+
+PlantCPDzoom + PlantNPDzoom + plot_annotation(title = "Change in Plant C and N content with Herbivore recycling rate", tag_levels = "a", tag_prefix = "(", tag_suffix = ")")
+
+#ggsave(filename = "../Results/Biomass_rh_zoom.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+The following graph shows a heatmap of the plant C and N content plotted on a 
+surface defined by the Herbivore's attack and recycling rates.
+
+```{r plant-biomass-eq-heatmap, echo=TRUE, tidy=TRUE, layout="l-body-outset"}
+plantHeat <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, ah, rh, Plant_N,Plant_C) %>%
+  pivot_longer(., cols = c(Plant_N:Plant_C), 
+               names_to = "EcoFunct", 
+               values_to = "Biomass") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen")) %>%
+  dplyr::group_by(., Nutrient) %>%
+  # filter the top and bottom 5% of data points to remove outliers
+  dplyr::filter(., 
+                between(Biomass,
+                        quantile(Biomass, 0.05, na.rm = T),
+                        quantile(Biomass, 0.95, na.rm = T)),
+                .preserve = TRUE) %>%
+  ungroup() %>%
+  mutate(., 
+         bin_ah = cut_width(ah, width = 0.5, boundary = 0),
+         bin_rh = cut_width(rh, width = 0.5, boundary = 0))
+
+# create a dataframe of the number of observations into each bin, will use it to label each tile in heatmap
+plantHM <- plantHeat %>% 
+  # dropping NAs in the value of DeltaNEP allows for the heatmap to correctly show tiles for bins that would otherwise be classified as NA
+  drop_na(Biomass) %>% 
+  group_by(Nutrient, bin_ah, bin_rh) %>% 
+  summarise(count = n(), 
+            mean = mean(Biomass),
+            .groups = "keep")
+
+meanCarbonPBhm <- filter(plantHM, Nutrient == "Carbon") %>%
+  ggplot(., aes(x = bin_ah, y = bin_rh)) +
+  geom_tile(aes(fill = mean)) +
+  scale_fill_viridis_c() +
+  scale_y_discrete(labels = seq(0,10,0.5)) +
+  scale_x_discrete(labels = seq(0,10,0.5)) +
+  ylab(expression(Recycling~rate~(r[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  # make the x- and y-axes title readable
+  ylab(expression(Recycling~rate~(r[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  # make the legend title readable
+  labs(fill = "Avg. C content") +
+  theme(legend.position = "bottom")
+
+meanNitrogenPBhm <- filter(plantHM, Nutrient == "Nitrogen") %>%
+  ggplot(., aes(x = bin_ah, y = bin_rh)) +
+  geom_tile(aes(fill = mean)) +
+  scale_fill_viridis_c() +
+  scale_y_discrete(labels = seq(0,10,0.5)) +
+  scale_x_discrete(labels = seq(0,10,0.5)) +
+  ylab(expression(Recycling~rate~(r[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  # make the x- and y-axes title readable
+  ylab(expression(Recycling~rate~(r[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  # make the legend title readable
+  labs(fill = "Avg. N content") +
+  theme(legend.position = "bottom")
+
+plantPdheat <- meanCarbonPBhm + meanNitrogenPBhm + plot_annotation(tag_levels = "a", tag_prefix = "(", tag_suffix = ")", title = "Heatmap of average Plant C and N equilibrium content", subtitle = "Top and bottom 5% data points was removed to avoid graphical artefacts") & coord_equal() & theme(legend.position = "bottom")
+
+plantPdheat
+
+#ggsave(filename = "../Results/BiomassHeatmap_ah.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+### Primary Productivity
+
+Moving on to Primary Productivity, first we are creating a graph analogous to
+Figure \@ref(fig:total-stock-contrast) showing the difference in Primary 
+Productivity when herbivores are _absent_ vs. when they are _present_. Note that,
+here we focus on Primary Productivity calculated using the carbon equations 
+listed above.
+
+```{r pp-carbon-bp, echo=TRUE, tidy=TRUE}  
+PPbp <- PrimProd %>%
+  # make sure "Compartment" and "herbivore" are factors
+    mutate(., 
+           herbivore = as_factor(herbivore),
+           herbivore = fct_recode(.f = herbivore, Present = "present", Absent = "absent")) %>%
+  # group by the three factors of interest
+    dplyr::group_by(., herbivore) %>% 
+  # filter the top and bottom 5% of data points to remove outliers
+    dplyr::filter(., between(PPc, 
+                          quantile(PPc, 0.05, na.rm = T), 
+                          quantile(PPc, 0.95, na.rm = T)),
+                  .preserve = TRUE) %>% 
+  ggplot(., aes(x = herbivore, y = PPc, col = herbivore)) + 
+  geom_half_boxplot(center = T, outlier.color = NA, notch = T, errorbar.draw = F) +
+  geom_half_point(shape = 21, alpha = 0.25, stroke = 1) +
+  stat_summary(geom = "label", 
+               fun = quantile,
+               fun.args = list(probs = 0.5),
+               aes(label = round(after_stat(y), 2)),
+               position = position_nudge(x = 0.19),
+               show.legend = F, size = 2.5,
+               label.padding = unit(0.15, "lines"),
+               label.size = 0.15,
+               fontface = "bold",
+               color = "black") +
+  ylab(expression(Primary~Productivity~(Phi[P[C]]^{"*"}))) +
+  xlab("Herbivore") +
+  scale_color_met_d("Egypt", direction = 1) +
+  theme(legend.position = "none",
+        text = element_text(size = 14)) 
+
+#ggsave(filename = "../Results/PrimProd_bp.svg", device = "svg", dpi = 300)
+
+PPbp
+```
+
+Next, we are plotting the value of Primary Productivity at equilibrium 
+($\Phi^*_P$) against the values of parameter _a~H~_.
+
+```{r prim-prod-eq, echo=TRUE, tidy=TRUE}
+PPeqplot <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, ah, rh, PPc) %>%
+  pivot_longer(., cols = c(ah:rh),
+               names_to = "HParameter",
+               values_to = "Value") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         HParameter = as_factor(HParameter),
+         HParameter = fct_recode(.f = HParameter, "a[H]" = "ah", "r[H]" = "rh")) %>%
+  group_by(., HParameter) 
+
+PPeqplot %>%
+  ggplot(., aes(x = Value, y = PPc)) +
+  geom_point(aes(color = ifelse(PPc > 0, "> 0", "< 0"), alpha = ifelse(PPc < 0, 1, 0.5)), shape = 21, stroke = 1) +
+  geom_line(aes(y = 0), lty = 2) +
+  geom_smooth(color = "black") +
+  ylab(expression(Phi[P[C]]^{"*"})) +
+  xlab(" ") +
+  ggtitle("Primary productivity at equilibrium against Herbivore attack and recycling rate") +
+  facet_wrap(.~HParameter, scales = "free", labeller = label_parsed) +
+  guides(alpha = FALSE, color = FALSE)
+
+#ggsave(filename = "../Results/PP_eq.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+And a zoomed-in version, to better see those $< 0$ points. Note that here we remove
+the trend lines as the constraints on the y-xis would cause them to produce 
+graphical artefacts. 
+
+```{r prim-prod-eq-zoom, echo=TRUE, tidy=TRUE}
+PPeqplot %>%
+  ggplot(., aes(x = Value, y = PPc)) +
+  geom_smooth(data = subset(PPeqplot, PPc < 0 & PPc > -800), color = "#890400") +
+  geom_smooth(data = subset(PPeqplot, PPc >= 0 & PPc < 800), color = "#006669") +
+  geom_point(aes(color = ifelse(PPc > 0, ">= 0", "< 0"), 
+                 alpha = ifelse(PPc < 0, 1, 0.5)), shape = 21, stroke = 1) +
+  geom_line(aes(y = 0), lty = 2) +
+  # geom_smooth(color = "#F8766D") +
+  ylab(expression(Phi[P]^{"*"})) +
+  xlab(" ") +
+  coord_cartesian(ylim = c(-750, 750)) +
+  ggtitle("Primary productivity at equilibrium against Herbivore attack and recycling rate") +
+  facet_wrap(.~HParameter, scales = "free", labeller = label_parsed) +
+  guides(alpha = FALSE, color = FALSE)
+
+#ggsave(filename = "../Results/PP_eq.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+The heatmap below shows the distribution of average Primary Productivity values 
+with the herbivores' attack and recycling rates, for the model _with_ 
+herbivores. Note that we removed the top and bottom 5% of average Primary 
+Productivity values to avoid graphical artefacts.
+
+```{r echo=TRUE, tidy=TRUE}
+# create a dataframe of the number of observations into each bin, will use it to label each tile in heatmap
+PPheat <- dplyr::select(EcoFunctPD, herbivore, TIME, ah, rh, PPc) %>%
+  filter(., herbivore == "present",
+         between(PPc,
+                 quantile(PPc, 0.05, na.rm = T),
+                 quantile(PPc, 0.95, na.rm = T))) %>%
+  mutate(., 
+         bin_ah = cut_width(ah, width = 0.5, boundary = 0),
+         bin_rh = cut_width(rh, width = 0.5, boundary = 0)) %>% 
+  # dropping NAs in the value of DeltaNEP allows for the heatmap to correctly show tiles for bins that would otherwise be classified as NA
+  # drop_na(DeltaNEP) %>% 
+  group_by(bin_ah, bin_rh) %>% 
+  summarise(count = n(), 
+            mean = mean(PPc),
+            .groups = "keep") 
+
+PPheatmap <- PPheat %>%
+  ggplot(., aes(x = bin_ah, y = bin_rh)) + 
+  # geom_point(aes(alpha = after_stat(..y..), col = Nutrient), shape = 20) +
+  geom_tile(aes(fill = mean)) +
+  scale_fill_viridis_c() +
+  scale_y_discrete(labels = seq(0,10,0.5)) +
+  scale_x_discrete(labels = seq(0,10,0.5)) +
+  ylab(expression(Recycling~rate~(r[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  labs(fill = "Primary Productivity") +
+  ggtitle("Heatmap of average Primary Productivity at equilibrium", subtitle = "Herbivore present. Top and bottom 5% values removed.")
+
+PPheatmap
+```
+
+The next figure shows the results for the change in Primary Production as a 
+function of _a~H~_, for both C and N.
+
+```{r prim-prod-pd-ah, echo=TRUE, tidy=TRUE}
+dPPah <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, ah, PP_N_ah, PP_C_ah) %>%
+  pivot_longer(., cols = c(PP_N_ah, PP_C_ah), 
+               names_to = "EcoFunct", 
+               values_to = "dPP") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient", "Variable"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen"),
+         dPPsign = ifelse(dPP > 0, "pos", "neg"),
+         dPPsign = as_factor(dPPsign),
+         dPPsign = fct_relevel(.f = dPPsign, "pos", "neg"))
+
+dPPah %>%
+  # dplyr::filter(., 
+  #               between(dPP,
+  #                       quantile(dPP, 0.05, na.rm = T),
+  #                       quantile(dPP, 0.95, na.rm = T)),
+  #               .preserve = TRUE) %>%
+  ggplot(., aes(x = ah, y = dPP)) +
+  # geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  geom_point(aes(color = dPPsign, alpha = desc(dPPsign)), shape = 21, stroke = 2, size = 2) +
+  # geom_smooth(color = "black") +
+  geom_point(data = subset(dPPah, dPPsign == "pos"), color = "#F8766D", shape = 21, stroke = 2, size = 2) +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(expression(paste(partialdiff,Phi[P]^{"*"},"/",partialdiff,a[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  scale_alpha_continuous(range = c(0.5,0.25)) +
+  ggtitle(expression(Change~"in"~Primary~Productivity~with~Herbivore~attack~rate~(a[H]))) +
+  facet_wrap(.~Nutrient, scales = "free") +
+  guides(color = "none", alpha = "none")
+
+#ggsave(filename = "../Results/PP_PD_ah.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+The data are hugging the top of the graph quite tight, so we will zoom in again 
+to better see the region around the `y = 0` line.
+
+```{r prim-prod-pd-ah-zoom, echo=TRUE,tidy=TRUE}
+dPPahCzoom <- dPPah %>% 
+  filter(., Nutrient == "Carbon") %>%
+  ggplot(., aes(x = ah, y = dPP)) +
+  geom_point(data = . %>% arrange(desc(dPPsign)), 
+             aes(color = dPPsign, alpha = desc(dPPsign)), 
+             shape = 21, stroke = 2, size = 2) +
+  geom_smooth(data = subset(dPPah, dPP <= 0 & dPP > -1000), color = "#006669") +
+  geom_smooth(data = subset(dPPah, dPP > 0 & dPP <= 1000), color = "#890400") +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(expression(paste(partialdiff,PP^{"*"}," / ",partialdiff,a[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  coord_cartesian(ylim = c(-1000, 1000), expand = F) +
+  # facet_wrap(.~Nutrient) +
+  guides(alpha = FALSE, color = FALSE)
+
+dPPahNzoom <- dPPah %>% 
+  filter(., Nutrient == "Nitrogen") %>%
+  ggplot(., aes(x = ah, y = dPP)) +
+  geom_point(data = . %>% arrange(desc(dPPsign)), 
+             aes(color = dPPsign, alpha = desc(dPPsign)), 
+             shape = 21, stroke = 2, size = 2) +
+  geom_smooth(data = subset(dPPah, dPP <= 0 & dPP > -1000), color = "#006669") +
+  geom_smooth(data = subset(dPPah, dPP > 0 & dPP < 1000), color = "#890400") +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(expression(paste(partialdiff,PP^{"*"}," / ",partialdiff,a[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  coord_cartesian(ylim = c(-1000, 1000), expand = F) +
+  # facet_wrap(.~Nutrient) +
+  guides(alpha = FALSE, color = FALSE)
+
+dPPahCzoom + dPPahNzoom + plot_annotation(tag_levels = "a", tag_prefix = "(", tag_suffix = ")")
+
+#ggsave(filename = "../Results/PP_PD_ah_zoom.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+Likewise, the graph below shows the results for the change in Primary Production
+with _r~H~_.
+
+```{r prim-prod-pd-rh, echo=TRUE, tidy=TRUE}
+dPPrh <- EcoFunctPD %>%
+  dplyr::select(., herbivore, TIME, rh, PP_N_rh,PP_C_rh) %>%
+  pivot_longer(., cols = c(PP_N_rh:PP_C_rh), 
+               names_to = "EcoFunct", 
+               values_to = "dPP") %>%
+  # separate the name of elements in "Compartment" in "Compartment" 
+  # and "Nutrient"
+  separate_wider_delim(., cols = "EcoFunct", 
+                       names = c("EcoFunct", "Nutrient", "Variable"), 
+                       delim = "_") %>%
+  # make sure "Nutrient" and "Variable" are factors, and change herbivore = "present" to be capitalized
+  mutate(.,
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen"),
+         dPPsign = ifelse(dPP > 0, "pos", "neg"),
+         dPPsign = as_factor(dPPsign),
+         dPPsign = fct_relevel(.f = dPPsign, "neg", "pos"))
+
+dPPrh %>%
+  # filter the top and bottom 5% of data points to remove outliers
+  # dplyr::filter(., 
+  #               between(dPP,
+  #                       quantile(dPP, 0.05, na.rm = T),
+  #                       quantile(dPP, 0.95, na.rm = T)),
+  #               .preserve = TRUE) %>%
+  ggplot(., aes(x = rh, y = dPP)) +
+  # geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  geom_point(aes(color = dPPsign, 
+                 alpha = desc(dPPsign)), 
+             shape = 21, stroke = 2, size = 2) +
+  # geom_smooth(color = "black") +
+  geom_point(data = subset(dPPrh, dPPsign == "neg"), 
+             color = "#F8766D", shape = 21, stroke = 2, size = 2) +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(expression(paste(partialdiff,Phi[P]^{"*"},"/",partialdiff,r[H]))) +
+  xlab(expression(Recycling~rate~(r[H]))) +
+  scale_alpha_continuous(range = c(0.5,0.25)) +
+  ggtitle(expression(Change~"in"~Primary~Productivity~with~Herbivore~recycling~rate~(r[H]))) +
+  facet_wrap(.~Nutrient, scales = "free") +
+  guides(color = "none", alpha = "none")
+
+#ggsave(filename = "../Results/PP_PD_rh.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+And, as before, we will now zoom into the area of the graph around the `y = 0` 
+line. 
+
+```{r prim-prod-pd-rh-zoom, echo=TRUE,tidy=TRUE, message=FALSE}
+dPPrhCzoom <- dPPrh %>% 
+  filter(., Nutrient == "Carbon") %>%
+  ggplot(., aes(x = rh, y = dPP)) +
+  geom_point(data = . %>% arrange(desc(dPPsign)), 
+             aes(color = dPPsign, alpha = desc(dPPsign)), 
+             shape = 21, stroke = 2, size = 2) +
+  geom_smooth(data = subset(dPPrh, dPP < 0 & dPP > -1000), color = "#890400") +
+  geom_smooth(data = subset(dPPrh, dPP >= 0 & dPP < 1000), color = "#006669") +
+  geom_line(aes(y = 0)) +
+  ylab(expression(paste(partialdiff,PP^{"*"}," / ",partialdiff,r[H]))) +
+  xlab(expression(Recycling~rate~(r[H]))) +
+  coord_cartesian(ylim = c(-1000, 1000)) +
+  # facet_wrap(.~Nutrient) +
+  guides(alpha = FALSE, color = FALSE)
+
+dPPrhNzoom <- dPPrh %>% 
+  filter(., Nutrient == "Nitrogen") %>%
+  ggplot(., aes(x = rh, y = dPP)) +
+  geom_point(data = . %>% arrange(desc(dPPsign)), 
+             aes(color = dPPsign, alpha = desc(dPPsign)), 
+             shape = 21, stroke = 2, size = 2) +
+  geom_smooth(data = subset(dPPrh, dPP < 0 & dPP > -1000), color = "#890400") +
+  geom_smooth(data = subset(dPPrh, dPP >= 0 & dPP < 1000), color = "#006669") +
+  geom_line(aes(y = 0)) +
+  ylab(expression(paste(partialdiff,PP^{"*"}," / ",partialdiff,r[H]))) +
+  xlab(expression(Recycling~rate~(r[H]))) +
+  coord_cartesian(ylim = c(-1000, 1000)) +
+  # facet_wrap(.~Nutrient) +
+  guides(alpha = FALSE, color = FALSE)
+
+dPPrhCzoom + dPPrhNzoom + plot_annotation(tag_levels = "a", tag_prefix = "(", tag_suffix = ")")
+
+#ggsave(filename = "../Results/PP_PD_rh_zoom.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+### Net Ecosystem Carbon Balance
+
+Below we investigate graphically the NECB results. The NECB equation we used is
+
+$$
+  NECB = Net~Primary~Production + Net~Heterotrophic~Production
+$$
+
+##### Comparison across model scenarios
+
+We start by taking a look at the values of NECB at equilibrium for the model 
+_with_ and _without_ herbivores. The figure below shows the same summary 
+statistics shown in the table above.
+
+```{r NECB-bp, echo=TRUE, tidy=TRUE, fig.cap="Difference in Net Ecosystem Carbon Balance between ecosystem _with_ and _without_ herbivores, at equilibrium."}  
+NECBbp <- ggplot(NECBres, aes(x = herbivore, y = NECB, col = herbivore)) + 
+  geom_half_boxplot(center = T, outlier.color = NA, notch = T, errorbar.draw = F) +
+  geom_half_point(shape = 21, alpha = 0.25, stroke = 1) +
+  stat_summary(geom = "label", 
+               fun = quantile,
+               fun.args = list(probs = 0.5),
+               aes(label = round(after_stat(y), 2)),
+               position = position_nudge(x = 0.19),
+               show.legend = F, size = 2.5,
+               label.padding = unit(0.15, "lines"),
+               label.size = 0.15,
+               fontface = "bold",
+               color = "black") +
+  ylab("NECB") +
+  xlab(" ") +
+  ggtitle("Net Ecosystem Carbon Balance") +
+  scale_color_met_d("Egypt", direction = 1) +
+  theme(legend.position = "none",
+        text = element_text(size = 20)) 
+
+#ggsave(filename = "../Results/NECBboxplot.svg", device = "svg", dpi = 300)
+
+NECBbp
+```
+
+The graph below shows the same NECB values, standardized to the total C biomass
+in the system.
+
+```{r NECB-bp-std, echo=TRUE,tidy=TRUE}
+NECBres %>%
+  mutate(., 
+         NECB_std = NECB/Total_C) %>%
+  ggplot(., aes(x = herbivore, y = NECB_std, col = herbivore)) + 
+  geom_half_boxplot(center = T, outlier.color = NA, notch = T, errorbar.draw = F, nudge = 0.05) +
+  geom_half_point(shape = 21, alpha = 0.25, stroke = 1) +
+  stat_summary(geom = "label", 
+               fun = quantile,
+               fun.args = list(probs = 0.5),
+               aes(label = round(after_stat(y), 2)),
+               position = position_nudge(x = 0.19),
+               show.legend = F, size = 2.5,
+               label.padding = unit(0.15, "lines"),
+               label.size = 0.15,
+               fontface = "bold",
+               color = "black") +
+  ylab("NECB") +
+  xlab(" ") +
+  ggtitle("Net Ecosystem Carbon Balance", 
+          subtitle = "Standardized to total C biomass in the system") +
+  scale_color_met_d("Egypt", direction = 1) +
+  theme(legend.position = "none",
+        text = element_text(size = 20)) 
+
+#ggsave(filename = "../Results/NECB_STD.svg", device = "svg", dpi = 300)
+```
+
+The next two graphs focus on the model _with_ herbivores, to investigate how NECB
+varies with the Herbivores' attack and recycling rates. The first one is a 
+boxplot that shows the values of NECB when herbivores are present in the system, 
+binned by the values of parameters _a~H~_ and _r~H~_. 
+
+```{r NECB-bp-herb-paired, echo=TRUE, tidy=TRUE}  
+NECBres %>%
+  filter(., herbivore == "Present") %>%
+  select(., herbivore, TIME, ah, rh, NECB) %>%
+  mutate(., 
+         bin_ah = cut_width(ah, width = 2, boundary = 0),
+         bin_rh = cut_width(rh, width = 2, boundary = 0)) %>%
+  pivot_longer(., cols = c(bin_ah, bin_rh), names_to = "BinName", values_to = "BinVal") %>% 
+  mutate(., BinName = as_factor(BinName)) %>%
+  ggplot(., aes(x = BinVal, y = NECB, col = BinName)) + 
+  geom_half_boxplot(center = T, outlier.color = NA, notch = T, errorbar.draw = F, nudge = 0.05) +
+  geom_half_point(shape = 21, alpha = 0.25, stroke = 1) +
+  ylab("NECB") +
+  xlab(" ") +
+  # ggtitle("Net Ecosystem Carbon Balance") +
+  scale_color_met_d("Egypt", direction = 1) +
+  labs(colour = "Parameter") +
+  theme(legend.position = "top",
+        text = element_text(size = 20)) 
+
+#ggsave(filename = "../Results/NECBjitter.svg", device = "svg", dpi = 300)
+```
+
+Next, is a heatmap showing the change in NECB with increasing values of herbivore
+attack rate ( _a~H~_ ) and recycling rate ( _r~H~_ ). Note that NECB values are 
+binned by _a~H~_ and _r~H~_ value so that the hue of each bin corresponds to the 
+**average** NECB value for that bin.
+
+```{r NECB-heatmap, echo=TRUE, tidy=TRUE, fig.cap = "Heatmap of the average value of NECB as herbivores' attack rate (a~H~) and recycling rate (r~H~) increase. NECB was calculated as the algebraic sum of Net Primary Productivity and Net Heterotrophic Productivity, and the top and bottom 5% values were removed prior to plotting to avoid graphical artefacts. Axes labels show the lower value of each bin."}
+avgNECB <- NECBres %>%
+  filter(., herbivore == "Present",
+         between(NECB,
+                 quantile(NECB, 0.05, na.rm = T),
+                 quantile(NECB, 0.95, na.rm = T)),
+         .preserve = TRUE
+         ) %>%
+  mutate(., 
+         bin_ah = cut_width(ah, width = 0.5, boundary = 0),
+         bin_rh = cut_width(rh, width = 0.5, boundary = 0))
+
+# create a dataframe of the number of observations into each bin, will use it to label each tile in heatmap
+NECBheatmap <- avgNECB %>% 
+  # dropping NAs in the value of DeltaNECB allows for the heatmap to correctly show tiles for bins that would otherwise be classified as NA
+  drop_na(NECB) %>% 
+  group_by(bin_ah, bin_rh) %>% 
+  summarise(count = n(), 
+            mean = mean(NECB),
+            .groups = "keep")
+
+
+NECBhm <- NECBheatmap %>%
+  ggplot(., aes(x = bin_ah, y = bin_rh)) + 
+  # geom_tile(aes(fill = log10(mean))) + # to use log10(mean) for filling, DO NOT remove top/bottom 5% values above
+  geom_tile(aes(fill = mean)) +
+  scale_fill_viridis_c() +
+  scale_y_discrete(labels = seq(0,10,0.5)) +
+  scale_x_discrete(labels = seq(0,10,0.5)) +
+  ylab(expression(Recycling~rate~(r[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  # labs(fill = expression("Avg. NECB ("~log[10]~")")) +
+  labs(fill = "Avg. NECB") +
+  coord_equal() 
+
+#ggsave("../Results/NECBheath.svg", device = "svg", dpi = 300)
+
+NECBhm
+```
+
+##### Change in NECB with herbivory
+
+Moving on to the results of the partial derivatives for NECB, the next graph 
+shows the results for the change in NECB as a function of _a~H~_.
+
+```{r NECB-pd-ah, echo=TRUE, tidy=TRUE}
+dNECBah <- NECBPD %>%
+  dplyr::select(., herbivore, TIME, ah, NECB_ah) %>% 
+  # filter the top and bottom 5% of data points to remove outliers
+  dplyr::filter(., 
+                between(NECB_ah,
+                        quantile(NECB_ah, 0.05, na.rm = T),
+                        quantile(NECB_ah, 0.95, na.rm = T)),
+                .preserve = TRUE) %>%
+  ungroup() %>%
+  ggplot(., aes(x = ah, y = NECB_ah)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  geom_smooth(color = "black") +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(expression(paste(partialdiff,"NECB"," / ",partialdiff,a[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  ggtitle("Change in NECB with Herbivore attack rate")
+
+#ggsave(filename = "../Results/NECB_ah.svg", device = "svg", dpi = 300)
+
+dNECBah
+```
+
+And a zoomed-in version.
+
+```{r NECB-new-pd-ah-zoom, echo=TRUE, tidy=TRUE}
+NECBPD %>%
+  dplyr::select(., herbivore, TIME, ah, NECB_ah) %>% 
+  # filter the top and bottom 5% of data points to remove outliers
+  dplyr::filter(., 
+                between(NECB_ah,
+                        quantile(NECB_ah, 0.05, na.rm = T),
+                        quantile(NECB_ah, 0.95, na.rm = T)),
+                .preserve = TRUE) %>%
+  ungroup() %>%
+  ggplot(., aes(x = ah, y = NECB_ah)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  # geom_smooth(color = "#F8766D") +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(expression(paste(partialdiff,"NECB"," / ",partialdiff,a[H]))) +
+  xlab(expression(Attack~rate~(a[H]))) +
+  ggtitle("Change in NECB with Herbivore attack rate") +
+  coord_cartesian(ylim=c(-500,500))
+
+#ggsave(filename = "../Results/NECB_ah_zoom.svg", device = "svg", dpi = 300)
+```
+
+Likewise, the graph below shows the results for the change in NECB with _r~H~_.
+
+```{r NECB-pd-rh, echo=TRUE, tidy=TRUE}
+dNECBrh <- NECBPD %>%
+  dplyr::select(., herbivore, TIME, rh,NECB_rh) %>% 
+  # filter the top and bottom 5% of data points to remove outliers
+  dplyr::filter(., 
+                between(NECB_rh,
+                        quantile(NECB_rh, 0.05, na.rm = T),
+                        quantile(NECB_rh, 0.95, na.rm = T)),
+                .preserve = TRUE) %>%
+  ungroup() %>%
+  ggplot(., aes(x = rh, y = NECB_rh)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  geom_smooth(color = "black") + 
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(expression(paste(partialdiff,"NECB"," / ",partialdiff,r[H]))) +
+  xlab(expression(Recycling~rate~(r[H]))) +
+  ggtitle("Change in NECB with Herbivore recycling rate")
+
+#ggsave(filename = "../Results/NECB_rh.svg", device = "svg", dpi = 300)
+
+dNECBrh
+```
+
+And a zoomed-in version for this one too.
+
+```{r NECB-pd-rh-zoom, echo=TRUE, tidy=TRUE}
+NECBPD %>%
+  dplyr::select(., herbivore, TIME, rh, NECB_rh) %>% 
+  # filter the top and bottom 5% of data points to remove outliers
+  dplyr::filter(., 
+                between(NECB_rh,
+                        quantile(NECB_rh, 0.05, na.rm = T),
+                        quantile(NECB_rh, 0.95, na.rm = T)),
+                .preserve = TRUE) %>%
+  ungroup() %>%
+  ggplot(., aes(x = rh, y = NECB_rh)) +
+  geom_point(shape = 21, stroke = 1, alpha = 0.25, color = "#00BFC4") +
+  # geom_smooth(color = "black") + 
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(expression(paste(partialdiff,"NECB"," / ",partialdiff,r[H]))) +
+  xlab(expression(Recycling~rate~(r[H]))) +
+  ggtitle("Change in NECB with Herbivore recycling rate") +
+  coord_cartesian(ylim=c(-100,1000))
+
+#ggsave(filename = "../Results/NECB_rh_zoom.svg", device = "svg", dpi = 300)
+```
+
+##### Relative parameter importance
+
+Figure \@ref(fig:NECB-rei-barplot) below provides insight in the relative weight
+of each parameter in shaping the value of NECB when herbivores are _present_ or
+_absent_.
+
+```{r NECB-rei-barplot, echo=TRUE, tidy=TRUE, warning=FALSE, fig.cap="Relative parameter importance for equilibrium NECB, when herbivores are absent (light bars) and present (solid bars), as determined by a global sensitivity analysis with NECB value as response variable."}
+NECBgsa_plot <- bind_rows(ranked_imp_NECB, ranked_imp_NECB_noherb, .id = "herbivore") %>% 
+  mutate(.,
+         Eqn = ifelse(Parameter == "q",
+                         "Soil", ifelse(Parameter == "α" |
+                                        Parameter == "δ" |
+                                        Parameter == "ap" |
+                                        Parameter == "rp",
+                                        "Plant", "Herbivore")),
+         Eqn = as_factor(Eqn),
+         Eqn = fct_relevel(.f = Eqn, "Herbivore", "Plant", "Soil"),
+         herbivore = as_factor(herbivore),
+         herbivore = fct_recode(.f = herbivore, "Present" = "1", "Absent" = "2"),
+         herbivore = fct_relevel(.f = herbivore, "Absent", "Present"),
+         Parameter = fct_reorder2(.f = Parameter, .x = RelImpI, .y = Eqn, .desc = FALSE)) %>% 
+  ggplot(., aes(x = RelImpI, y = Parameter)) + 
+  geom_col(aes(fill = Eqn, col = Eqn, group = herbivore, alpha = herbivore),
+           position = position_dodge()) +
+  # scale_alpha_continuous(range = seq(0.5, 1, 0.5)) +
+  scale_fill_met_d(name = "Isfahan2", direction = -1) +
+  scale_color_met_d(name = "Isfahan2", direction = -1) +  
+  xlab("Relative Importance Index") + 
+  ylab(" ") +
+  labs(fill = "Trophic\nCompartment", alpha = "Herbivore") +
+  theme_classic() +
+  theme(text = element_text(size = 18)) +
+  guides(color = "none")
+
+NECBgsa_plot2 <- NECBgsa_plot +
+  coord_flip() +
+  scale_y_discrete("Parameter", 
+                   labels = c("β", "π", 
+                              expression(a[H]), expression(r[H]), 
+                              "α", "δ", expression(a[P]), 
+                              expression(r[P]),
+                              expression(q[S]))) +
+  theme(panel.grid.major.y = element_line(linetype = 2))
+
+#ggsave(NECBgsa_plot2, filename = "../Results/NECBgsaRI.svg", device = "svg", dpi = 300)
+
+NECBgsa_plot2
+```
+
+## Publication figures
+
+Here we provide code to reproduce the figures from the manuscript. The next two 
+Figures \@ref(fig:herb-params-RI-paired) and \@ref(fig:no-herb-params-RI-paired) 
+are re-works of Figures \@ref(fig:gsa-herbivore-model-plot) and
+\@ref(fig:gsa-no-herbivore-model-plot). Here, results of the GSA are shown as 
+paired bars, to compare the Relative Importance of each parameter in driving the
+dynamics of C or N in the system. Together, these figures are include in 
+**Figure 1** of the manuscript and provide evidence of the trophic rewiring that
+Herbivores elicit in ecosystems---which ultimately underlies their effects on an
+ecosystem's ability to capture and store atmospheric C.
+
+Here is the figure for the model _without_ herbivores.
+
+```{r no-herb-params-RI-paired, echo=TRUE, tidy=TRUE, warning=FALSE, layout="l-body-outset", fig.width=8, fig.height=6, fig.cap="This figure is a rework of the earlier one, showing the results from the Global Stability Analysis for the model without herbivores, but uses paired bars and transparency of color fill instead of facets to convey the information about the nutrient (carbon or nitrogen) considered."}
+pairedRI <- bind_rows(herbGSA, noherbGSA, .id = "Herbivore") %>%
+  # separate column SV (State Variable) into its components, i.e., Compartment and Nutrient
+  separate(., col = SV, into = c("Compartment", "Nutrient"), sep = "_") %>% 
+  # create a new column, Eqn, to track which equation the parameters 
+  # originate from, which will be used to group them along the y-axis 
+  # then, make sure columns Compartment, Nutrient, and Eqn are factors
+  # finally, reorder column Parameter so along the values of Relative Importance 
+  # and grouped by Eqn
+  mutate(.,
+         Herbivore = as_factor(Herbivore),
+         Herbivore = fct_recode(.f = Herbivore, "Present" = "1", 
+                                "Absent" = "2"),
+         Herbivore = fct_relevel(.f = Herbivore, "Absent", "Present"),
+         Eqn = ifelse(Parameter == "I" |
+                         Parameter == "k" |
+                         Parameter == "q",
+                         "Soil", ifelse(Parameter == "α" |
+                                        Parameter == "δ" |
+                                        Parameter == "ap" |
+                                        Parameter == "rp",
+                                        "Plant", "Herbivore")),
+         Compartment = as_factor(Compartment),
+         Nutrient = as_factor(Nutrient),
+         Nutrient = fct_recode(.f = Nutrient, Nitrogen = "N", Carbon = "C"),
+         Nutrient = fct_relevel(.f = Nutrient, "Carbon", "Nitrogen"),
+         Eqn = as_factor(Eqn),
+         Eqn = fct_relevel(.f = Eqn, "Soil", "Plant", "Herbivore"),
+         Parameter = fct_reorder2(.f = Parameter, .x = RelImpI, .y = Eqn)) %>% 
+  # now, lets build the plot
+  group_by(., Herbivore, Nutrient, Compartment)
+
+noherbRI <- pairedRI %>%
+  filter(., Herbivore == "Absent") %>%
+  ggplot(., aes(x = RelImpI, y = Parameter)) + 
+  geom_col(aes(fill = Eqn, col = Eqn, group = Nutrient, alpha = Nutrient),
+           position = position_dodge()) +
+  scale_fill_manual(values = Isfahan2_2cols) +
+  scale_color_manual(values = Isfahan2_2cols) +
+  # scale_alpha_continuous(range = seq(0.5, 1, 0.5)) +
+  xlab("Relative Importance Index") + 
+  ylab(" ") +
+  facet_wrap(.~Compartment) +
+  labs(fill = "Trophic Compartment") +
+  theme_classic() +
+  theme(text = element_text(size = 18),
+        panel.grid.major.y = element_line(linetype = 2)) +
+  guides(color = "none")
+
+noherbRI2 <- noherbRI +
+  scale_y_discrete("Parameter", 
+                   labels = c("α", "δ", expression(a[P]), 
+                              expression(r[P]), "I", "k",
+                              expression(q[S]))) +
+  coord_flip(xlim = c(0, 1), expand = T) +
+  theme(legend.position = "top")
+
+# ggsave(noherbRI2, filename = "../Results/noherbRIpaired.svg", device = "svg", dpi = 300, width = width, height = height)
+
+noherbRI2
+```
+
+And this is the figure for the model _with_ herbivores.
+
+```{r herb-params-RI-paired, echo=TRUE, tidy=TRUE, warning=FALSE, layout="l-body-outset", fig.width=8, fig.height=6, fig.cap="This figure combines the two graphs produced above that captured information on the Relative Importnace of each parameter in the model with herbivores."}
+
+herbRI <- pairedRI %>%
+  filter(., Herbivore == "Present", 
+         Compartment != "Herbivore") %>%
+  ggplot(., aes(x = RelImpI, y = Parameter)) + 
+  geom_col(aes(fill = Eqn, col = Eqn, group = Nutrient, alpha = Nutrient),
+           position = position_dodge(), stat=identity) +
+  scale_fill_met_d(name = "Isfahan2", direction = 1) +
+  scale_color_met_d(name = "Isfahan2", direction = 1) +
+  xlab("Relative Importance Index") + 
+  ylab(" ") +
+  facet_wrap(.~Compartment) +
+  labs(fill = "Trophic Compartment") +
+  theme_classic() +
+  theme(text = element_text(size = 18),
+        panel.grid.major.y = element_line(linetype = 2)) +
+  guides(color = "none")
+
+herbRI2 <- herbRI +
+  scale_y_discrete("Parameter", 
+                   labels = c("β", "π", 
+                              expression(a[H]), expression(r[H]), 
+                              "α", "δ", expression(a[P]), 
+                              expression(r[P]), "I", "k",
+                              expression(q[S]))) +
+  coord_flip(xlim = c(0, 1), expand = T) +
+  theme(legend.position = "top")
+
+# ggsave(herbRI2, filename = "../Results/herbRIpaired.svg", device = "svg", dpi = 300, width = width, height = height)
+
+herbRI2
+```
+
+Moving to the results for [Primary Productivity] ($\Phi^*_{P}$) at equilibrium,
+here we show the difference herbivore presence makes in terms of equilibrium
+primary productivity (panel (a)) and in the trophic structure of the model 
+(panel (b)). Notice that here, as above, we focus on carbon (i.e., $\Phi^*_{P_C}$) 
+and ignore nitrogen.
+
+```{r echo=TRUE, tidy=TRUE, layout="l-body-outset", fig.width=10, fig.height=6, fig.cap="Combined plot showing the difference in equilibrium Primary Productivity when herbivores are present compared to when they are absent from the system (panel (a)) and the different weight of each parameter in determining Primary Productivity for carbon betweem the model with and without herbivores (panel (b)). In panel (b), bars are colored based on the equation each parameter originates from and colors are either solid (herbivore present) or transparent (herbivore absent)."}
+
+PPbp + PPGSAplot4 + plot_annotation(tag_levels = "a", tag_prefix = "(", tag_suffix = ")") 
+
+# ggsave(filename = "../Results/PrimProd_bpREI.svg", device = "svg", dpi = 300, width = width, height = height)
+```
+
+The following figure shows the change in $\Phi^*_{P_C}$ with herbivore attack 
+rate (top row) and with herbivore recycling rate (bottom row). Insets in each 
+panel zoom in to show the area around `y = 0` in greater detail.
+
+```{r echo=TRUE, tidy=TRUE, message=FALSE, layout="l-body-outset", fig.width=10, fig.height=5, fig.cap = "Change in equilibrium Primary Productivity with herbivores' attack rate (a~H~, top row) and recycling rate (r~H~, bottom row), in both Carbon and Nitrogen. Data points in red identify instances in which primary productivity acts counter to expectations. That is, it when increasing a~H~ leads to increase in primary productivity (top row), or when increasing r~H~ leads to decrease in primary productivity (bottom row). Insets show the region around y = 0 for each panel in greater detail (note the different y-axis scales), with lines of best fit fitted to points above/below y = 0 separately."}
+dPPahplot <- dPPah %>%
+  filter(., Nutrient == "Carbon") %>%
+  ggplot(., aes(x = ah, y = dPP)) +
+  geom_point(aes(color = dPPsign, alpha = desc(dPPsign)), shape = 21, stroke = 2, size = 2) +
+  geom_point(data = subset(dPPah, dPPsign == "pos"), color = "#F8766D", shape = 21, stroke = 2, size = 2) +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab("Change in Primary Productivity") +
+  xlab(expression(Attack~rate~(a[H]))) +
+  scale_alpha_continuous(range = c(0.5,0.25)) +
+  scale_y_continuous(label = fancy_scientific) +
+  guides(color = "none", alpha = "none") +
+  theme(text = element_text(size = 14))
+
+dPPahZoom <- dPPah %>%
+  filter(., Nutrient == "Carbon") %>%
+  ggplot(., aes(x = ah, y = dPP)) +
+  geom_point(aes(color = dPPsign, alpha = desc(dPPsign)), shape = 21, stroke = 2, size = 2) +
+  geom_point(data = subset(dPPah, dPPsign == "pos"), color = "#F8766D", shape = 21, stroke = 2, size = 2) +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(" ") +
+  xlab(" ") +
+  scale_alpha_continuous(range = c(0.5,0.25)) +
+  scale_y_continuous(label = fancy_scientific) +
+  coord_cartesian(ylim = c(-2000, 2000)) +
+  guides(color = "none", alpha = "none") +
+  theme(text = element_text(size = 14),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.25))
+
+dPPrhplot <- dPPrh %>%
+  filter(., Nutrient == "Carbon") %>%
+  ggplot(., aes(x = rh, y = dPP)) +
+  geom_point(aes(color = dPPsign, alpha = desc(dPPsign)), shape = 21, stroke = 2, size = 2) +
+  geom_point(data = subset(dPPrh, dPPsign == "neg"), color = "#F8766D", shape = 21, stroke = 2, size = 2) +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(" ") +
+  xlab(expression(Recycling~rate~(r[H]))) +
+  scale_alpha_continuous(range = c(0.5,0.25)) +
+  scale_y_continuous(label = fancy_scientific) +
+  guides(color = "none", alpha = "none") +
+  theme(text = element_text(size = 14))
+
+dPPrhZoom <- dPPrh %>%
+  filter(., Nutrient == "Carbon") %>%
+  ggplot(., aes(x = rh, y = dPP)) +
+  geom_point(aes(color = dPPsign, alpha = desc(dPPsign)), shape = 21, stroke = 2, size = 2) +
+  geom_point(data = subset(dPPrh, dPPsign == "neg"), color = "#F8766D", shape = 21, stroke = 2, size = 2) +
+  geom_line(aes(y = 0), lty = 2) +
+  ylab(" ") +
+  xlab(" ") +
+  scale_alpha_continuous(range = c(0.5,0.25)) +
+  scale_y_continuous(labels = fancy_scientific) +
+  coord_cartesian(ylim = c(-2000, 2000)) +
+  guides(color = "none", alpha = "none") +
+  theme(text = element_text(size = 14),
+        panel.border = element_rect(color = "black", fill = NA, size = 0.25))
+
+# create inset plots
+dPPahInset <- dPPahplot + inset_element(dPPahZoom, 0.15, 0.15, 0.95, 0.75, clip = T, ignore_tag = T) 
+
+dPPrhInset <- dPPrhplot + inset_element(dPPrhZoom, 0.15, 0.15, 0.95, 0.75, clip = T, ignore_tag = T)
+
+# assemble combined plot
+dPPahInset + dPPrhInset
+
+# ggsave(filename = "../Results/dPPvsHerbT_insets.svg", device = "svg", dpi = 300, width = 1.5*height, height = width)
+```
+
+Putting these two figures together as a summary for our results on the influence
+of herbivore on Primary Productivity, which appear in the manuscript as **Figure 2**.
+
+```{r echo=TRUE, tidy=TRUE}
+# assemble combined figure
+((PPbp + PPGSAplot4) / (dPPahInset + dPPrhInset)) + plot_annotation(tag_levels = "a", tag_prefix = "(", tag_suffix = ")")
+
+# ggsave(filename = "../Results/PPsummary.svg", device = "svg", dpi = 300, width = 1.15*width, height = width)
+```
+
+Finally, this next figure summarizes the results on [Net Ecosystem Carbon Balance].
+It combines figures \@ref(fig:NECB-eq-bp) (panel (a)), 
+\@ref(fig:NECB-eq-heatmap) (panel (b)), and \@ref(fig:NECB-rei-barplot)
+(panel (c)). The result appears in the manuscript as **Figure 3**.
+
+```{r NECB-summary, echo=TRUE, tidy=TRUE, message = FALSE, warning=FALSE, layout="l-body-outset", fig.width=10, fig.height=8}
+NECBbp_log <- NECBbp + ggtitle("NECB = NPP + NHP") + scale_y_continuous(
+    trans = "log10",
+    breaks = function(x) {
+      brks <- scales::extended_breaks(Q = c(0.1, 5))(log10(x))
+      10^(brks[brks %% 1 == 0])
+    },
+    labels = scales::math_format(format = log10)
+    # labels = fancy_scientific
+  ) + theme(text = element_text(size = 10.5))
+
+NECBhm <- NECBhm + theme(legend.position = "right") 
+
+# assemble combined plot
+((NECBbp_log + NECBhm) / NECBgsa_plot2) + plot_annotation(tag_levels = "a", tag_prefix = "(", tag_suffix = ")") & theme(text = element_text(size = 14))
+
+# ggsave(filename = "../Results/NECBsummary_log.svg", device = "svg", dpi = 300, width = 1.15*width, height = width)
+```

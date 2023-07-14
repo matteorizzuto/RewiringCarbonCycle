@@ -1,0 +1,211 @@
+Model derivation
+for Rewiring the carbon cycle : a theoretical framework for animal - driven ecosystem carbon sequestration
+by Matteo Rizzuto, Shawn J. Leroux, and Oswald J. Schmitz
+Model with Herbivores
+Equilibria
+In this notebook, we describe development of our model accounting for the influence of animals on ecosystem carbon cycling. The model tracks the movement of carbon (C) and another nutrient (in this case, nitrogen [N]) through three compartments: soil (s), plants (P), and herbivores (H). C enters the system via photosynthesis. Part of this C gets recycled by the plants themselves, and the remaining portion is lost via plant respiration. Herbivores contribute to respiration-induced loss of C (\[Pi] ) and to C recycling (1-\[Pi] ).
+
+
+
+The model's parameters, units of measurements, and value ranges are described in Table 1 in the manuscript.
+Subscript[W, CH ]and Subscript[W, NH] are  functions that represent the differential assimilation rate of carbon and nitrogen by herbivores, respectively. Note that, under N-limitation, \[Alpha] > \[Beta].
+The cell below evaluates the full model, in which all expression (e.g., Subscript[W, CH][Subscript[H, N], Subscript[H, C]])  have been made explicit. Note that, in the expressions below, "J" stands for "I" and  "p" stands for "\[Pi]" in the expressions below, as "I" and "\[Pi]" are pre-defined quantities in Mathematica. 
+In[1]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+eqns={0==J-k*Sn-ap*Pn*Sn*Sc+rp*Pn+rh*Hn,
+0==(1-\[Delta])*\[Alpha]*rp*Pn+(1-p)*\[Beta]*rh*Hn-q*Sn*Sc,
+0==ap*Pn*Sn*Sc-ah*Pn*Hn-rp*Pn,
+0==ah*Pn*Hn-rh*Hn};
+sol=FullSimplify[Solve[eqns,{Sn,Sc,Pn,Hn}]]
+MatrixForm[sol]
+Out[3]= {{Sn->J/k,Sc->0,Pn->0,Hn->0},{Sn->J/k,Sc->(k rh rp (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah J q+ap J (-1+p) rh \[Beta]),Pn->rh/ah,Hn->-((rp (ah q+ap rh \[Alpha] (-1+\[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta])))},{Sn->J/k,Sc->(k rp)/(ap J),Pn->q/(ap \[Alpha]-ap \[Alpha] \[Delta]),Hn->0}}
+Out[4]//MatrixForm= (Sn->J/k	Sc->0	Pn->0	Hn->0
+Sn->J/k	Sc->(k rh rp (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah J q+ap J (-1+p) rh \[Beta])	Pn->rh/ah	Hn->-((rp (ah q+ap rh \[Alpha] (-1+\[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta])))
+Sn->J/k	Sc->(k rp)/(ap J)	Pn->q/(ap \[Alpha]-ap \[Alpha] \[Delta])	Hn->0
+
+)
+Because this is a stoichiometrically-explicit model, the equations for Subscript[P, C] and Subscript[H, C] are related to the equations for Subscript[P, N] and Subscript[H, N] by the Carbon:Nitrogen ratio, here represented by \[Alpha] for Subscript[P, i] and by \[Beta] for Subscript[H, i]. Hence, the equilibria for Subscript[P, C] and Subscript[H, C] are simply the equilibria for Subscript[P, N] and Subscript[H, N] multiplied by \[Alpha] and/or \[Beta], respectively. That is why the expressions for  Subscript[P, C] and Subscript[H, C] do not appear in the system of equations above. See the Supplementary Information of Leroux & Schmitz (2015, Ecol Evol) and Daufresne & Loreau (2001, Ecology) for more information.  
+Only one of the three equilibria found above has biological meaning\[LongDash]i.e., has all state variables > 0. The middle one:
+\!\(
+\*SubsuperscriptBox[\(S\), \(N\), \(*\)] -> 
+\*FractionBox[\(J\), \(k\)]\),
+\!\(
+\*SubsuperscriptBox[\(S\), \(C\), \(*\)] -> 
+\*FractionBox[\(k\ rh\ rp\ \((\[Alpha] + \((\(-1\) + p)\)\ \[Beta] - \[Alpha]\ \[Delta])\)\), \(ah\ J\ q + ap\ J\ \((\(-1\) + p)\)\ rh\ \[Beta]\)]\),
+\!\(
+\*SubsuperscriptBox[\(P\), \(N\), \(*\)] -> 
+\*FractionBox[\(rh\), \(ah\)]\),
+\!\(
+\*SubsuperscriptBox[\(H\), \(N\), \(*\)] -> \(-
+\*FractionBox[\(rp\ \((ah\ q + ap\ rh\ \[Alpha]\ \((\(-1\) + \[Delta])\))\)\), \(ah\ \((ah\ q + ap\ \((\(-1\) + p)\)\ rh\ \[Beta])\)\)]\)\)
+We will be using this equilibrium to continue analyses on the model, starting with feasibility conditions.
+Feasibility conditions
+Here, we look for feasibility conditions for the equilibrium found above where all state variables are > 0.
+In[5]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[Reduce[J/k>0&&(k rh rp (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah J q+ap J (-1+p) rh \[Beta])>0&&rh/ah>0&&-((rp (ah q+ap rh \[Alpha] (-1+\[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta])))>0&& J>0&&k>0&&rh>0&&rp>0&&ap>0&&ah>0&&p>0&&q>00&&\[Alpha]>0&&\[Beta]>0&&  \[Delta]>0]]
+Out[6]= \[Alpha]>0&&ah>0&&ap>0&&J>0&&k>0&&rh>0&&rp>0&&((p>0&&p<1&&((ah (ah q+ap (-1+p) rh \[Beta])<0&&((\[Beta]>0&&\[Delta]>=1&&q>0)||(\[Beta]>(\[Alpha] (-1+\[Delta]))/(-1+p)&&ah (ah q+ap rh \[Alpha] (-1+\[Delta]))>0&&\[Delta]>0&&\[Delta]<1)))||(\[Beta]>0&&\[Delta]>0&&\[Beta]<(\[Alpha] (-1+\[Delta]))/(-1+p)&&ah (ah q+ap rh \[Alpha] (-1+\[Delta]))<0&&\[Delta]<1&&ah (ah q+ap (-1+p) rh \[Beta])>0)))||(\[Beta]>0&&p>=1&&q>0&&\[Delta]>0&&ah (ah q+ap rh \[Alpha] (-1+\[Delta]))<0&&\[Delta]<1))
+Local Stability Analysis
+Using the Jacobian Matrix of the model, we will look for the stability conditions for the single feasible equilibrium found above. 
+In[7]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+(*First, let's store each of the model's equations in its own object*)
+Sne = J - k*Sn - ap*Pn*Sn*Sc + rp*Pn + rh*Hn;
+Sce= (1 - \[Delta])*\[Alpha]*rp*Pn + (1-p)*\[Beta]*rh*Hn-q*Sn*Sc;
+Pne = ap*Pn*Sn*Sc-ah*Pn*Hn-rp*Pn;
+Hne = ah*Pn*Hn-rh*Hn;
+(*Then, using code from Leroux et al. 2012 Proc B, calculate the Jacobian Matrix*)
+JacobianMatrix[fns_List, vars_List]:=Outer[D,fns, vars];
+JM = JacobianMatrix[{Sne,Sce,Pne,Hne}, {Sn, Sc, Pn, Hn}]
+MatrixForm[JM]
+Out[13]= {{-k-ap Pn Sc,-ap Pn Sn,rp-ap Sc Sn,rh},{-q Sc,-q Sn,rp \[Alpha] (1-\[Delta]),(1-p) rh \[Beta]},{ap Pn Sc,ap Pn Sn,-ah Hn-rp+ap Sc Sn,-ah Pn},{0,0,ah Hn,ah Pn-rh}}
+Out[14]//MatrixForm= (-k-ap Pn Sc	-ap Pn Sn	rp-ap Sc Sn	rh
+-q Sc	-q Sn	rp \[Alpha] (1-\[Delta])	(1-p) rh \[Beta]
+ap Pn Sc	ap Pn Sn	-ah Hn-rp+ap Sc Sn	-ah Pn
+0	0	ah Hn	ah Pn-rh
+
+)
+In[42]:= CP=CharacteristicPolynomial[{{-k-ap Pn Sc,-ap Pn Sn,rp-ap Sc Sn,rh},{-q Sc,-q Sn,rp \[Alpha] (1-\[Delta]),(1-p) rh \[Beta]},{ap Pn Sc,ap Pn Sn,-ah Hn-rp+ap Sc Sn,-ah Pn},{0,0,ah Hn,ah Pn-rh}},\[Lambda]]
+Out[42]= -ah Hn (-ah k Pn q Sn+ap k Pn rh Sn \[Beta]-ap k p Pn rh Sn \[Beta]-ah k Pn \[Lambda]-ah ap Pn^2 Sc \[Lambda]+ap Pn rh Sc \[Lambda]-ah Pn q Sn \[Lambda]+ap Pn rh Sn \[Beta] \[Lambda]-ap p Pn rh Sn \[Beta] \[Lambda]-ah Pn \[Lambda]^2)+(ah Pn-rh-\[Lambda]) (-ah Hn k q Sn-k q rp Sn+ap k q Sc Sn^2+ap k Pn rp Sn \[Alpha]-ap k Pn rp Sn \[Alpha] \[Delta]-ah Hn k \[Lambda]-k rp \[Lambda]-ah ap Hn Pn Sc \[Lambda]-ah Hn q Sn \[Lambda]-k q Sn \[Lambda]-q rp Sn \[Lambda]+ap k Sc Sn \[Lambda]+ap q Sc Sn^2 \[Lambda]+ap Pn rp Sn \[Alpha] \[Lambda]-ap Pn rp Sn \[Alpha] \[Delta] \[Lambda]-ah Hn \[Lambda]^2-k \[Lambda]^2-rp \[Lambda]^2-ap Pn Sc \[Lambda]^2-q Sn \[Lambda]^2+ap Sc Sn \[Lambda]^2-\[Lambda]^3)
+In[43]:= Collect[CP, \[Lambda]]
+Out[43]= ah Hn k q rh Sn-ah k Pn q rp Sn+k q rh rp Sn+ah ap k Pn q Sc Sn^2-ap k q rh Sc Sn^2+ah ap k Pn^2 rp Sn \[Alpha]-ap k Pn rh rp Sn \[Alpha]-ah ap Hn k Pn rh Sn \[Beta]+ah ap Hn k p Pn rh Sn \[Beta]-ah ap k Pn^2 rp Sn \[Alpha] \[Delta]+ap k Pn rh rp Sn \[Alpha] \[Delta]+(ah Hn k rh-ah k Pn rp+k rh rp+ah Hn k q Sn-ah k Pn q Sn+ah Hn q rh Sn+k q rh Sn+k q rp Sn-ah Pn q rp Sn+q rh rp Sn+ah ap k Pn Sc Sn-ap k rh Sc Sn-ap k q Sc Sn^2+ah ap Pn q Sc Sn^2-ap q rh Sc Sn^2-ap k Pn rp Sn \[Alpha]+ah ap Pn^2 rp Sn \[Alpha]-ap Pn rh rp Sn \[Alpha]-ah ap Hn Pn rh Sn \[Beta]+ah ap Hn p Pn rh Sn \[Beta]+ap k Pn rp Sn \[Alpha] \[Delta]-ah ap Pn^2 rp Sn \[Alpha] \[Delta]+ap Pn rh rp Sn \[Alpha] \[Delta]) \[Lambda]+(ah Hn k-ah k Pn+ah Hn rh+k rh+k rp-ah Pn rp+rh rp+ah ap Hn Pn Sc-ah ap Pn^2 Sc+ap Pn rh Sc+ah Hn q Sn+k q Sn-ah Pn q Sn+q rh Sn+q rp Sn-ap k Sc Sn+ah ap Pn Sc Sn-ap rh Sc Sn-ap q Sc Sn^2-ap Pn rp Sn \[Alpha]+ap Pn rp Sn \[Alpha] \[Delta]) \[Lambda]^2+(ah Hn+k-ah Pn+rh+rp+ap Pn Sc+q Sn-ap Sc Sn) \[Lambda]^3+\[Lambda]^4
+In[17]:= MatrixForm[Eigenvalues[{{-k-ap Pn Sc,-ap Pn Sn,rp-ap Sc Sn,rh},{-q Sc,-q Sn,rp \[Alpha] (1-\[Delta]),(1-p) rh \[Beta]},{ap Pn Sc,ap Pn Sn,-ah Hn-rp+ap Sc Sn,-ah Pn},{0,0,ah Hn,ah Pn-rh}}]]
+Out[17]//MatrixForm= (Root[ah Hn k q rh Sn-ah k Pn q rp Sn+k q rh rp Sn+ah ap k Pn q Sc Sn^2-ap k q rh Sc Sn^2+ah ap k Pn^2 rp Sn \[Alpha]-ap k Pn rh rp Sn \[Alpha]-ah ap Hn k Pn rh Sn \[Beta]+ah ap Hn k p Pn rh Sn \[Beta]-ah ap k Pn^2 rp Sn \[Alpha] \[Delta]+ap k Pn rh rp Sn \[Alpha] \[Delta]+(ah Hn k rh-ah k Pn rp+k rh rp+ah Hn k q Sn-ah k Pn q Sn+ah Hn q rh Sn+k q rh Sn+k q rp Sn-ah Pn q rp Sn+q rh rp Sn+ah ap k Pn Sc Sn-ap k rh Sc Sn-ap k q Sc Sn^2+ah ap Pn q Sc Sn^2-ap q rh Sc Sn^2-ap k Pn rp Sn \[Alpha]+ah ap Pn^2 rp Sn \[Alpha]-ap Pn rh rp Sn \[Alpha]-ah ap Hn Pn rh Sn \[Beta]+ah ap Hn p Pn rh Sn \[Beta]+ap k Pn rp Sn \[Alpha] \[Delta]-ah ap Pn^2 rp Sn \[Alpha] \[Delta]+ap Pn rh rp Sn \[Alpha] \[Delta]) #1+(ah Hn k-ah k Pn+ah Hn rh+k rh+k rp-ah Pn rp+rh rp+ah ap Hn Pn Sc-ah ap Pn^2 Sc+ap Pn rh Sc+ah Hn q Sn+k q Sn-ah Pn q Sn+q rh Sn+q rp Sn-ap k Sc Sn+ah ap Pn Sc Sn-ap rh Sc Sn-ap q Sc Sn^2-ap Pn rp Sn \[Alpha]+ap Pn rp Sn \[Alpha] \[Delta]) #1^2+(ah Hn+k-ah Pn+rh+rp+ap Pn Sc+q Sn-ap Sc Sn) #1^3+#1^4&,1]
+Root[ah Hn k q rh Sn-ah k Pn q rp Sn+k q rh rp Sn+ah ap k Pn q Sc Sn^2-ap k q rh Sc Sn^2+ah ap k Pn^2 rp Sn \[Alpha]-ap k Pn rh rp Sn \[Alpha]-ah ap Hn k Pn rh Sn \[Beta]+ah ap Hn k p Pn rh Sn \[Beta]-ah ap k Pn^2 rp Sn \[Alpha] \[Delta]+ap k Pn rh rp Sn \[Alpha] \[Delta]+(ah Hn k rh-ah k Pn rp+k rh rp+ah Hn k q Sn-ah k Pn q Sn+ah Hn q rh Sn+k q rh Sn+k q rp Sn-ah Pn q rp Sn+q rh rp Sn+ah ap k Pn Sc Sn-ap k rh Sc Sn-ap k q Sc Sn^2+ah ap Pn q Sc Sn^2-ap q rh Sc Sn^2-ap k Pn rp Sn \[Alpha]+ah ap Pn^2 rp Sn \[Alpha]-ap Pn rh rp Sn \[Alpha]-ah ap Hn Pn rh Sn \[Beta]+ah ap Hn p Pn rh Sn \[Beta]+ap k Pn rp Sn \[Alpha] \[Delta]-ah ap Pn^2 rp Sn \[Alpha] \[Delta]+ap Pn rh rp Sn \[Alpha] \[Delta]) #1+(ah Hn k-ah k Pn+ah Hn rh+k rh+k rp-ah Pn rp+rh rp+ah ap Hn Pn Sc-ah ap Pn^2 Sc+ap Pn rh Sc+ah Hn q Sn+k q Sn-ah Pn q Sn+q rh Sn+q rp Sn-ap k Sc Sn+ah ap Pn Sc Sn-ap rh Sc Sn-ap q Sc Sn^2-ap Pn rp Sn \[Alpha]+ap Pn rp Sn \[Alpha] \[Delta]) #1^2+(ah Hn+k-ah Pn+rh+rp+ap Pn Sc+q Sn-ap Sc Sn) #1^3+#1^4&,2]
+Root[ah Hn k q rh Sn-ah k Pn q rp Sn+k q rh rp Sn+ah ap k Pn q Sc Sn^2-ap k q rh Sc Sn^2+ah ap k Pn^2 rp Sn \[Alpha]-ap k Pn rh rp Sn \[Alpha]-ah ap Hn k Pn rh Sn \[Beta]+ah ap Hn k p Pn rh Sn \[Beta]-ah ap k Pn^2 rp Sn \[Alpha] \[Delta]+ap k Pn rh rp Sn \[Alpha] \[Delta]+(ah Hn k rh-ah k Pn rp+k rh rp+ah Hn k q Sn-ah k Pn q Sn+ah Hn q rh Sn+k q rh Sn+k q rp Sn-ah Pn q rp Sn+q rh rp Sn+ah ap k Pn Sc Sn-ap k rh Sc Sn-ap k q Sc Sn^2+ah ap Pn q Sc Sn^2-ap q rh Sc Sn^2-ap k Pn rp Sn \[Alpha]+ah ap Pn^2 rp Sn \[Alpha]-ap Pn rh rp Sn \[Alpha]-ah ap Hn Pn rh Sn \[Beta]+ah ap Hn p Pn rh Sn \[Beta]+ap k Pn rp Sn \[Alpha] \[Delta]-ah ap Pn^2 rp Sn \[Alpha] \[Delta]+ap Pn rh rp Sn \[Alpha] \[Delta]) #1+(ah Hn k-ah k Pn+ah Hn rh+k rh+k rp-ah Pn rp+rh rp+ah ap Hn Pn Sc-ah ap Pn^2 Sc+ap Pn rh Sc+ah Hn q Sn+k q Sn-ah Pn q Sn+q rh Sn+q rp Sn-ap k Sc Sn+ah ap Pn Sc Sn-ap rh Sc Sn-ap q Sc Sn^2-ap Pn rp Sn \[Alpha]+ap Pn rp Sn \[Alpha] \[Delta]) #1^2+(ah Hn+k-ah Pn+rh+rp+ap Pn Sc+q Sn-ap Sc Sn) #1^3+#1^4&,3]
+Root[ah Hn k q rh Sn-ah k Pn q rp Sn+k q rh rp Sn+ah ap k Pn q Sc Sn^2-ap k q rh Sc Sn^2+ah ap k Pn^2 rp Sn \[Alpha]-ap k Pn rh rp Sn \[Alpha]-ah ap Hn k Pn rh Sn \[Beta]+ah ap Hn k p Pn rh Sn \[Beta]-ah ap k Pn^2 rp Sn \[Alpha] \[Delta]+ap k Pn rh rp Sn \[Alpha] \[Delta]+(ah Hn k rh-ah k Pn rp+k rh rp+ah Hn k q Sn-ah k Pn q Sn+ah Hn q rh Sn+k q rh Sn+k q rp Sn-ah Pn q rp Sn+q rh rp Sn+ah ap k Pn Sc Sn-ap k rh Sc Sn-ap k q Sc Sn^2+ah ap Pn q Sc Sn^2-ap q rh Sc Sn^2-ap k Pn rp Sn \[Alpha]+ah ap Pn^2 rp Sn \[Alpha]-ap Pn rh rp Sn \[Alpha]-ah ap Hn Pn rh Sn \[Beta]+ah ap Hn p Pn rh Sn \[Beta]+ap k Pn rp Sn \[Alpha] \[Delta]-ah ap Pn^2 rp Sn \[Alpha] \[Delta]+ap Pn rh rp Sn \[Alpha] \[Delta]) #1+(ah Hn k-ah k Pn+ah Hn rh+k rh+k rp-ah Pn rp+rh rp+ah ap Hn Pn Sc-ah ap Pn^2 Sc+ap Pn rh Sc+ah Hn q Sn+k q Sn-ah Pn q Sn+q rh Sn+q rp Sn-ap k Sc Sn+ah ap Pn Sc Sn-ap rh Sc Sn-ap q Sc Sn^2-ap Pn rp Sn \[Alpha]+ap Pn rp Sn \[Alpha] \[Delta]) #1^2+(ah Hn+k-ah Pn+rh+rp+ap Pn Sc+q Sn-ap Sc Sn) #1^3+#1^4&,4]
+
+)
+Not much can be gleamed by these eigenvalues. Probably best to proceed to numerical analysis.
+Setting up conditions for analyses
+Here, we calculate the values of several key fluxes and quantities in the model. We will then use partial derivatives to investigate how these quantities change with changes in some of the model' s parameters . 
+Plant Biomass (Subsuperscript[P, N, *])
+Plant biomass measures how much biomass of primary producers accumulates in the ecosystem as time passes and the processes of primary production, plant respiration, and herbivore  consumption interact with each other.  Taking the partial derivative with respect to either the attack rate or the recycling rate of the Herbivore allows us to investigate the influence of the consumers' trophic interactions with the resources on the latter's long-term survival. First, let's take the partial derivative with respect to the Herbivore attack rate, Subscript[a, H]:
+In[18]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+D[\[Alpha]*rh/ah, ah]
+Out[19]= -((rh \[Alpha])/ah^2)
+And now, the same but with respect to the Herbivore recycling rate, Subscript[r, H]
+In[20]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+D[rh/ah,rh]
+Out[21]= 1/ah
+Plant Productivity at Equilibrium (Subsuperscript[\[CapitalPhi], P, *])
+As shown in Table 1 of the main document, the formula for Subsuperscript[\[CapitalPhi], P, *] is Subscript[a, P] Subscript[P, N] Subscript[S, N] Subscript[S, C]. We will substitute the equilibrium values of each state variable in this expression, which will give me the equilibrium, value of plant productivity. For N, we have
+In[22]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[ap*rh/ah*J/k*(k rh rp (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah J q+ap J (-1+p) rh \[Beta])]
+Out[23]= (ap rh^2 rp (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah (ah q+ap (-1+p) rh \[Beta]))
+With this quantity in hand, we can now take the partial derivative of the plant productivity with respect to Subscript[a, H]\[LongDash]the herbivore's nutrition rate (i.e., consumer foraging/attack rate). This will give an idea of how the uptake of nitrogen by the plants changes as herbivory increases or decreases in the system.
+In[24]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[D[(ap rh^2 rp (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah (ah q+ap (-1+p) rh \[Beta])),ah]]
+Out[25]= (ap rh^2 rp (2 ah q+ap (-1+p) rh \[Beta]) (\[Beta]-p \[Beta]+\[Alpha] (-1+\[Delta])))/(ah^2 (ah q+ap (-1+p) rh \[Beta])^2)
+And now with respect to the Herbivore recycling rate,
+In[26]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[D[(ap rh^2 rp (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah (ah q+ap (-1+p) rh \[Beta])),rh]]
+Out[27]= (ap rh rp (2 ah q+ap (-1+p) rh \[Beta]) (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah (ah q+ap (-1+p) rh \[Beta])^2)
+For C, the formulae are
+In[28]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[\[Alpha]*ap*rh/ah*J/k*(k rh rp (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah J q+ap J (-1+p) rh \[Beta])]
+Out[29]= (ap rh^2 rp \[Alpha] (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah (ah q+ap (-1+p) rh \[Beta]))
+Taking the partial derivative with respect to ah,
+In[30]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[D[(ap rh^2 rp \[Alpha] (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah (ah q+ap (-1+p) rh \[Beta])),ah]]
+Out[31]= (ap rh^2 rp \[Alpha] (2 ah q+ap (-1+p) rh \[Beta]) (\[Beta]-p \[Beta]+\[Alpha] (-1+\[Delta])))/(ah^2 (ah q+ap (-1+p) rh \[Beta])^2)
+And with respect to rh,
+In[32]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[D[(ap rh^2 rp \[Alpha] (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah (ah q+ap (-1+p) rh \[Beta])),rh]]
+Out[33]= (ap rh rp \[Alpha] (2 ah q+ap (-1+p) rh \[Beta]) (\[Alpha]+(-1+p) \[Beta]-\[Alpha] \[Delta]))/(ah (ah q+ap (-1+p) rh \[Beta])^2)
+Net Ecosystem Carbon Balance
+Here we derive the expression for Net Ecosystem Carbon Balance (NECB) and its partial derivative w . r . t . Subscript[a, H]and Subscript[r, H]. NECB is the algebraic sum of Net Primary Productivity and Net Heterotrophic Productivity\[LongDash]where Net Heterotrophic Productivity is the algebraic sum of the net productivity of herbivores, of soil, etc. First, we will calculate it starting from the N-side of the model (see figure above), then from the C-side of the model. With the two expressions in hand, I will then look for similarities and possible scaling factors.
+In[44]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+In[45]:= FullSimplify[ap*rh/ah*J/k*(k*rh*rp*(\[Alpha]+(-1+p)*\[Beta]-\[Alpha]*\[Delta]))/(ah*J*q+ap*J*(-1+p)*rh*\[Beta])-rp*rh/ah+ah*rh/ah*-((rp*(ah*q+ap*rh*\[Alpha]*(-1+\[Delta])))/(ah*(ah*q+ap*(-1+p)*rh*\[Beta])))-rh*-((rp*(ah*q+ap*rh*\[Alpha]*(-1+\[Delta])))/(ah*(ah*q+ap*(-1+p)*rh*\[Beta])))+J-k*J/k]
+Out[45]= -((rh rp (ah q+ap rh \[Alpha] (-1+\[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta])))
+In[46]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[D[-((rh rp (ah q+ap rh \[Alpha] (-1+\[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta]))),ah]]
+Out[47]= (rh rp (ah^2 q^2+2 ah ap q rh \[Alpha] (-1+\[Delta])+ap^2 (-1+p) rh^2 \[Alpha] \[Beta] (-1+\[Delta])))/(ah^2 (ah q+ap (-1+p) rh \[Beta])^2)
+In[48]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[D[-((rh rp (ah q+ap rh \[Alpha] (-1+\[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta]))),rh]]
+Out[49]= -((rp (ah^2 q^2+2 ah ap q rh \[Alpha] (-1+\[Delta])+ap^2 (-1+p) rh^2 \[Alpha] \[Beta] (-1+\[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta])^2))
+Now, I calculate it for the C - side,
+In[50]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[\[Alpha]*ap*rh/ah*J/k*(k*rh*rp*(\[Alpha]+(-1+p)*\[Beta]-\[Alpha]*\[Delta]))/(ah*J*q+ap*J*(-1+p)*rh*\[Beta])+\[Beta]*ah*rh/ah*-((rp*(ah*q+ap*rh*\[Alpha]*(-1+\[Delta])))/(ah*(ah*q+ap*(-1+p)*rh*\[Beta])))+\[Beta]*rh*-((rp*(ah*q+ap*rh*\[Alpha]*(-1+\[Delta])))/(ah*(ah*q+ap*(-1+p)*rh*\[Beta])))+\[Alpha]*rp*rh/ah-2*\[Alpha]*\[Delta]*rp*rh/ah-q*J/k*(k*rh*rp*(\[Alpha]+(-1+p)*\[Beta]-\[Alpha]*\[Delta]))/(ah*J*q+ap*J*(-1+p)*rh*\[Beta])]
+Out[51]= -((rh rp (ap rh \[Alpha] (\[Alpha]+2 p \[Beta]) (-1+\[Delta])+ah q (\[Beta]+p \[Beta]+\[Alpha] \[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta])))
+In[52]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[D[-((rh rp (ap rh \[Alpha] (\[Alpha]+2 p \[Beta]) (-1+\[Delta])+ah q (\[Beta]+p \[Beta]+\[Alpha] \[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta]))),ah]]
+Out[53]= (rh rp (2 ah ap q rh \[Alpha] (\[Alpha]+2 p \[Beta]) (-1+\[Delta])+ap^2 (-1+p) rh^2 \[Alpha] \[Beta] (\[Alpha]+2 p \[Beta]) (-1+\[Delta])+ah^2 q^2 (\[Beta]+p \[Beta]+\[Alpha] \[Delta])))/(ah^2 (ah q+ap (-1+p) rh \[Beta])^2)
+In[54]:= FullSimplify[D[-((rh rp (ap rh \[Alpha] (\[Alpha]+2 p \[Beta]) (-1+\[Delta])+ah q (\[Beta]+p \[Beta]+\[Alpha] \[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta]))),rh]]
+Out[54]= -((rp (2 ah ap q rh \[Alpha] (\[Alpha]+2 p \[Beta]) (-1+\[Delta])+ap^2 (-1+p) rh^2 \[Alpha] \[Beta] (\[Alpha]+2 p \[Beta]) (-1+\[Delta])+ah^2 q^2 (\[Beta]+p \[Beta]+\[Alpha] \[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta])^2))
+Model without Herbivores
+Equilibria
+Here, we derive equilibria for a version of this same model without the herbivore compartments.  Without the herbivore compartment, the model looks like this:
+
+
+Again, the expression for Subscript[P, C] at equilibrium is just \[Alpha]*Subscript[P, N]. Hence, below we will look for the equilibria of a system of three equations. 
+In[55]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+eqns5= { 0 == J - k*Sn - ap*Pn*Sn*Sc + rp*Pn,
+0== (1-\[Delta])*\[Alpha]*rp*Pn - q*Sn*Sc,
+0==ap*Pn*Sn*Sc-rp*Pn};
+sol = FullSimplify[Solve[eqns5, {Sn, Sc, Pn}]]
+MatrixForm[sol]
+Out[57]= {{Sn->J/k,Sc->0,Pn->0},{Sn->J/k,Sc->(k rp)/(ap J),Pn->q/(ap \[Alpha]-ap \[Alpha] \[Delta])}}
+Out[58]//MatrixForm= (Sn->J/k	Sc->0	Pn->0
+Sn->J/k	Sc->(k rp)/(ap J)	Pn->q/(ap \[Alpha]-ap \[Alpha] \[Delta])
+
+)
+We will be using the second set of equilibria to find feasibility conditions and for the rest of the analyses, as in the first one three of four state variables are = 0.
+Feasibility conditions
+The chunk below finds the conditions in which the single biologically meaningful equilibrium is also feasible .
+In[59]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[Reduce[J/k>0&&(k rp)/(ap J)>0&&q/(ap \[Alpha]-ap \[Alpha] \[Delta])>0&&J>0&&k>0&&rp>0&&ap>0&&q>00&&\[Alpha]>0&&\[Delta]>0]]
+Out[60]= \[Alpha]>0&&0<\[Delta]<1&&rp>0&&q>0&&k>0&&J>0&&ap>0
+Local Stability Analysis
+Here, we look for the stability conditions of this herbivore-free model.
+In[61]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+(*First, let's store each of the model's equations in its own object*)
+NHSne = J - k*Sn - ap*Pn*Sn*Sc + rp*Pn;
+NHSce= (1-\[Delta])*\[Alpha]*rp*Pn - q*Sn*Sc;
+NHPne = ap*Pn*Sn*Sc-rp*Pn;
+(*Then, using code from Leroux et al. 2012 Proc B, calculate the Jacobian Matrix*)
+JacobianMatrix[fns_List, vars_List]:=Outer[D,fns, vars];
+JMnh = JacobianMatrix[{NHSne,NHSce,NHPne}, {Sn, Sc, Pn}]
+MatrixForm[JMnh]
+Out[66]= {{-k-ap Pn Sc,-ap Pn Sn,rp-ap Sc Sn},{-q Sc,-q Sn,rp \[Alpha] (1-\[Delta])},{ap Pn Sc,ap Pn Sn,-rp+ap Sc Sn}}
+Out[67]//MatrixForm= (-k-ap Pn Sc	-ap Pn Sn	rp-ap Sc Sn
+-q Sc	-q Sn	rp \[Alpha] (1-\[Delta])
+ap Pn Sc	ap Pn Sn	-rp+ap Sc Sn
+
+)
+In[28]:= CPnh=CharacteristicPolynomial[{{-k-ap Pn Sc,-ap Pn Sn,rp-ap Sc Sn},{-q Sc,-q Sn,rp \[Alpha] (1-\[Delta])},{ap Pn Sc,ap Pn Sn,-rp+ap Sc Sn}},x]
+Out[28]= -k q rp Sn+ap k q Sc Sn^2-k rp x-k q Sn x-q rp Sn x+ap k Sc Sn x+ap q Sc Sn^2 x-k x^2-rp x^2-ap Pn Sc x^2-q Sn x^2+ap Sc Sn x^2-x^3+ap k Pn rp Sn \[Alpha]+ap Pn rp Sn x \[Alpha]-ap k Pn rp Sn \[Alpha] \[Delta]-ap Pn rp Sn x \[Alpha] \[Delta]
+In[70]:= MatrixForm[Eigenvalues[{{-k-ap Pn Sc,-ap Pn Sn,rp-ap Sc Sn},{-q Sc,-q Sn,rp \[Alpha] (1-\[Delta])},{ap Pn Sc,ap Pn Sn,-rp+ap Sc Sn}}]]
+Out[70]//MatrixForm= (Root[k q rp Sn-ap k q Sc Sn^2-ap k Pn rp Sn \[Alpha]+ap k Pn rp Sn \[Alpha] \[Delta]+(k rp+k q Sn+q rp Sn-ap k Sc Sn-ap q Sc Sn^2-ap Pn rp Sn \[Alpha]+ap Pn rp Sn \[Alpha] \[Delta]) #1+(k+rp+ap Pn Sc+q Sn-ap Sc Sn) #1^2+#1^3&,1]
+Root[k q rp Sn-ap k q Sc Sn^2-ap k Pn rp Sn \[Alpha]+ap k Pn rp Sn \[Alpha] \[Delta]+(k rp+k q Sn+q rp Sn-ap k Sc Sn-ap q Sc Sn^2-ap Pn rp Sn \[Alpha]+ap Pn rp Sn \[Alpha] \[Delta]) #1+(k+rp+ap Pn Sc+q Sn-ap Sc Sn) #1^2+#1^3&,2]
+Root[k q rp Sn-ap k q Sc Sn^2-ap k Pn rp Sn \[Alpha]+ap k Pn rp Sn \[Alpha] \[Delta]+(k rp+k q Sn+q rp Sn-ap k Sc Sn-ap q Sc Sn^2-ap Pn rp Sn \[Alpha]+ap Pn rp Sn \[Alpha] \[Delta]) #1+(k+rp+ap Pn Sc+q Sn-ap Sc Sn) #1^2+#1^3&,3]
+
+)
+As above, not much can be gleaned here from these eigenvalues. 
+Setting up conditions for analyses
+In this version of the model, herbivores are absent so that taking the partial derivative of any of the three fluxes we worked with above with respect to Subscript[a, H] and Subscript[r, H] is meaningless. To sidestep this problem, and still try to compare apples with apples, we will be taking the partial derivatives of Subscript[\[CapitalPhi], P], Subscript[\[Theta], P], and Subscript[\[Gamma], S] with respect to Subscript[a, P] and Subscript[r, H].
+Plant Biomass (Subsuperscript[P, N, *])
+As above, we start by taking the partial derivative of the equilibrium biomass of Subscript[P, N] with respect to Subscript[a, P].
+In[71]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[D[q/(ap*\[Alpha]-ap*\[Alpha]*\[Delta]),ap] ]
+Out[72]= q/(ap^2 \[Alpha] (-1+\[Delta]))
+Plant Productivity at Equilibrium (Subsuperscript[\[CapitalPhi], P, *])
+As above, we start by calculating the value of Subsuperscript[\[CapitalPhi], P, *] is Subscript[a, P] Subscript[P, N] Subscript[S, N] Subscript[S, C] and then taking the partial derivative of the equilibrium biomass of Subscript[P, N] with respect to Subscript[a, P] and Subscript[r, P].
+In[73]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[ap*q/(ap* \[Alpha]-ap* \[Alpha]* \[Delta])*J/k*(k*rp)/(ap*J)] 
+Out[74]= (q rp)/(ap \[Alpha]-ap \[Alpha] \[Delta])
+In[1]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[\[Alpha]*ap*q/(ap* \[Alpha]-ap* \[Alpha]* \[Delta])*J/k*(k*rp)/(ap*J)] 
+Out[2]= (q rp)/(ap-ap \[Delta])
+In[75]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[D[(q rp)/(ap \[Alpha]-ap \[Alpha] \[Delta]),ap]]
+Out[76]= (q rp)/(ap^2 \[Alpha] (-1+\[Delta]))
+In[77]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[D[(q rp)/(ap \[Alpha]-ap \[Alpha] \[Delta]),rp]]
+Out[78]= q/(ap \[Alpha]-ap \[Alpha] \[Delta])
+Net Ecosystem Carbon Balance
+Here, as above, we begin by evaluating  the NECB on the N - side of the model and its partial derivatives w . r . t . Subscript[a, P] and Subscript[r, P] .
+In[91]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[ap*q/(ap \[Alpha]-ap \[Alpha] \[Delta])*J/k*(k rp)/(ap J)-rp*q/(ap \[Alpha]-ap \[Alpha] \[Delta])+J-k*J/k]
+Out[92]= 0
+On the C-side of the model,
+In[93]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[ \[Alpha]*ap*q/(ap \[Alpha]-ap \[Alpha] \[Delta])*J/k*(k rp)/(ap J)+ \[Alpha]*rp*q/(ap \[Alpha]-ap \[Alpha] \[Delta])-2*\[Alpha]*\[Delta]*rp*q/(ap \[Alpha]-ap \[Alpha] \[Delta])-q*J/k*(k rp)/(ap J)]
+Out[94]= (q rp)/ap
