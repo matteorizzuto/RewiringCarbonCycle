@@ -22,6 +22,8 @@ author:
     affiliation_url: https://environment.yale.edu
     orcid_id: https://orcid.org/0000-0003-1515-2667    
 date: "`r Sys.Date()`"
+creative_commons: CC BY-NC-ND
+repository_url: https://github.com/matteorizzuto/RewiringCarbonCycle
 output: 
   distill::distill_article:
     toc: true
