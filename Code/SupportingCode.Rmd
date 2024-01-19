@@ -610,7 +610,7 @@ hRESrandomI_pos <- hRESrandomI %>%
 paged_table(hRESrandomI_pos)
 ```
 
-After removing the parameter sets that produce state variables _= 0_, we am left 
+After removing the parameter sets that produce state variables _= 0_, we are left 
 with **`r prettyNum(nrow(hRESrandomI_pos))`** parameter sets that yield feasible 
 and positive (_> 0_) stock values for all state variables in the model. 
 
@@ -1445,7 +1445,7 @@ $$
 And we can derive the formula for the partial derivative on the C-side of the 
 model by simply multiplying it by _α_. The code chunk below uses the 
 `EcoFunctPD` dataframe create in the earlier code chunk to calculate partial 
-derivative of _P^*^_ with respect to _r~H~_. 
+derivative of _P*_ with respect to _r~H~_. 
 
 ```{r scenario-2-plant-biomass-part-deriv-rh, echo = TRUE, tidy = TRUE}
 EcoFunctPD <- mutate(EcoFunctPD, 
@@ -1541,7 +1541,7 @@ EcoFunctPD_pred <- randomI %>%
          Plant_C_ah = α*(rr*(ar*q*rp*(α-α*δ+β*(-1+τ))+ap*rh*rr*(β^2)*(π-τ)*(-1+τ)))/(ap*((ar*rp*α*(-1+δ)+ah*rr*β*(-1+τ))^2)))
 ```
 
-As for _r~H~_, the partial derivative of _P^*^~N~_ with respect to it is
+As for _r~H~_, the partial derivative of _P*~N~_ with respect to it is
 
 $$
 \frac{\partial P^*_N}{\partial r_H} = \frac{r_R \beta (-\pi + \tau)}{a_R r_P \alpha (-1 + \delta) + a_H r_R \beta (-1 + \tau)}
@@ -1611,13 +1611,13 @@ the predators' uptake (_a~R~_) and recycling (_r~R~_) rates. The partial
 derivative of primary producers biomass with respect to _a~R~_ is,
 
 $$
-\frac{\partial P^{*}_{N}}{\partial a_{R}} = (r_{P} r_{R} (a_{P} r_{H} \alpha \beta (-1 + \delta) (\pi - \tau) + a_{H} q_{S} (\beta + \alpha (-1 + \delta) - \beta \tau)))/(a_{P} (a_{R} r_{P} \alpha (-1 + \delta) + a_{H} r_{R} \beta (-1 + \tau))^2)
+\tiny \frac{\partial P^{*}_{N}}{\partial a_{R}} = (r_{P} r_{R} (a_{P} r_{H} \alpha \beta (-1 + \delta) (\pi - \tau) + a_{H} q_{S} (\beta + \alpha (-1 + \delta) - \beta \tau)))/(a_{P} (a_{R} r_{P} \alpha (-1 + \delta) + a_{H} r_{R} \beta (-1 + \tau))^2)
 $$
 
 and with respect to _a~R~_,
 
 $$
-\frac{\partial P^{*}_{N}}{\partial r_{R}} = (a_{R} r_{P} (a_{H} q_{S} (\alpha - \alpha \delta + \beta (-1 + \tau)) - a_{P} r_{H} \alpha \beta (-1 + \delta) (\pi - \tau)))/(a_{P} (a_{R} r_{P} \alpha (-1 + \delta) + a_{H} r_{R} \beta (-1 + \tau))^2)
+\tiny \frac{\partial P^{*}_{N}}{\partial r_{R}} = (a_{R} r_{P} (a_{H} q_{S} (\alpha - \alpha \delta + \beta (-1 + \tau)) - a_{P} r_{H} \alpha \beta (-1 + \delta) (\pi - \tau)))/(a_{P} (a_{R} r_{P} \alpha (-1 + \delta) + a_{H} r_{R} \beta (-1 + \tau))^2)
 $$
 
 The following code chunk calculates the values of the partial derivative of 
@@ -1684,7 +1684,7 @@ We use the $\Phi_P$ term as a proxy for primary productivity in either modeling
 scenario, _with_ or _without_ herbivores. Below, we calculate primary productivity
 for both scenarios. Then investigate its partial derivative ($\partial$) with 
 respect to parameters _a~H~_ and _r~H~_ for the model _with_ herbivores. Note 
-that the formulae for $\partial PP$ vary based on whether we am calculating it 
+that the formulae for $\partial PP$ vary based on whether we are calculating it 
 on the C- or on the N-side of the model.
 
 Substituting the equilibrium values of the state variables $S^*_i$, $P^*_i$, 
@@ -1836,7 +1836,8 @@ first check the influence of herbivores' uptake and recycling rates on primary
 productivity.
 
 <aside>
-Recall that  $P^*_C = \alpha \cdot P^*_N$
+Recall that  
+$P^*_C = \alpha \cdot P^*_N$
 $H^*_C = \beta \cdot H^*_N$
 $R^*_C = \beta \cdot R^*_N$
 </aside>
@@ -1845,7 +1846,7 @@ The partial derivative of primary productivity with respect to the herbivore
 uptake rate (_a~H~_) in this modeling scenario is,
 
 $$
-\frac{\partial \Phi^*_P}{\partial a_H} = \frac{r_{R} (a_{R} r_{P} r_{R} (-2 a_{H} q_{S} \alpha (-1 + \delta) + a_{P} r_{H} \beta (\alpha - \alpha \delta + \beta (-1 + \tau)) (\pi - \tau)) + (a_{R})^2 q_{S} (r_{P})^2 (-2 \alpha (-1 + \delta) + \beta (-1 + \tau)) - (a_{H})^2 q_{S} (r_{R})^2 \beta (-1 + \tau))}{a_{P} a_{R} (a_{R} r_{P} \alpha (-1 + \delta) + a_{H} r_{R} \beta (-1 + \tau))^2}
+\tiny \frac{\partial \Phi^*_P}{\partial a_H} = \frac{r_{R} (a_{R} r_{P} r_{R} (-2 a_{H} q_{S} \alpha (-1 + \delta) + a_{P} r_{H} \beta (\alpha - \alpha \delta + \beta (-1 + \tau)) (\pi - \tau)) + (a_{R})^2 q_{S} (r_{P})^2 (-2 \alpha (-1 + \delta) + \beta (-1 + \tau)) - (a_{H})^2 q_{S} (r_{R})^2 \beta (-1 + \tau))}{a_{P} a_{R} (a_{R} r_{P} \alpha (-1 + \delta) + a_{H} r_{R} \beta (-1 + \tau))^2}
 $$
 
 And the partial derivative with respect to the herbivore recycling rate (_r~H~_) is,
@@ -1919,7 +1920,7 @@ in the ecosystem, here is the formula for the partial derivative of $\Phi^*_P$
 with respect to _a~R~_, the uptake rate of the predator.
 
 $$
-\frac{\partial \Phi^*_{P}}{\partial a_{R}} = \frac{(r_{R} (a_{H}^2 r_{R} (2 a_r_{R} q_{S} r_{P} \alpha (-1 + \delta) + a_{P} r_{H} r_{R} \beta^2 (\pi - \tau) (-1 + \tau)) + a_{P} a_{R}^2 r_{H} r_{P}^2 \alpha \beta (-1 + \delta) (\pi - \tau) + a_{H}^3 q_{S} r_{R}^2 \beta (-1 + \tau) + a_{H} a_{R} r_{P} (2 a_{P} r_{H} r_{R} \alpha \beta (-1 + \delta) (\pi - \tau) + a_{R} q_{S} r_{P} (\beta + 2 \alpha (-1 + \delta) - \beta \tau))))}{(a_{P} a_{R}^2 (a_{R} r_{P} \alpha (-1 + \delta) + a_{H} r_{R} \beta (-1 + \tau))^2)}
+\tiny \frac{\partial \Phi^*_{P}}{\partial a_{R}} = \frac{(r_{R} (a_{H}^2 r_{R} (2 a_{R} q_{S} r_{P} \alpha (-1 + \delta) + a_{P} r_{H} r_{R} \beta^2 (\pi - \tau) (-1 + \tau)) + a_{P} a_{R}^2 r_{H} r_{P}^2 \alpha \beta (-1 + \delta) (\pi - \tau) + a_{H}^3 q_{S} r_{R}^2 \beta (-1 + \tau) + a_{H} a_{R} r_{P} (2 a_{P} r_{H} r_{R} \alpha \beta (-1 + \delta) (\pi - \tau) + a_{R} q_{S} r_{P} (\beta + 2 \alpha (-1 + \delta) - \beta \tau))))}{(a_{P} a_{R}^2 (a_{R} r_{P} \alpha (-1 + \delta) + a_{H} r_{R} \beta (-1 + \tau))^2)}
 $$
 
 And the partial derivative of $\Phi^*_P$ with respect to _r~R~_, the predator's
@@ -2185,7 +2186,7 @@ $$
 Finally, for modeling scenario (iii), NECB is,
 
 $$
-NECB^* = \frac{a_R^2 q_S r_P^2 \alpha (-1 + \delta) + a_R r_P r_R (-a_P r_H \alpha \beta (-1 + \delta) + a_H q_S (\alpha (-2 + \delta) + \beta (-2 + \tau))) + a_H r_R^2 (a_P r_H \beta (\beta - \pi (\alpha + \beta) + \alpha \tau) - a_H q_S (\alpha + 2 \beta - \beta \tau))}{a_P a_R (a_R r_P \alpha (-1 + \delta) + a_H r_R \beta (-1 + \tau))}
+\tiny NECB^* = \frac{a_R^2 q_S r_P^2 \alpha (-1 + \delta) + a_R r_P r_R (-a_P r_H \alpha \beta (-1 + \delta) + a_H q_S (\alpha (-2 + \delta) + \beta (-2 + \tau))) + a_H r_R^2 (a_P r_H \beta (\beta - \pi (\alpha + \beta) + \alpha \tau) - a_H q_S (\alpha + 2 \beta - \beta \tau))}{a_P a_R (a_R r_P \alpha (-1 + \delta) + a_H r_R \beta (-1 + \tau))}
 $$
 
 The code chunk below uses these formulae and dataframe `randomI` to calculate NECB 
@@ -2246,13 +2247,13 @@ When taking the partial derivative of equilibrium NECB with respect to _a~H~_
 in scenario (ii), we have,
 
 $$
-\frac{\partial NECB^*}{\partial a_{H}} = \frac{r_{P} r_{P} (2 a_{H} a_{{p}} q_{S} r_{H} \alpha^2 (-1 + \delta) + a^2_{P} (-1 + \pi) r^2_{H} \alpha^2 \beta (-1 + \delta) + a^2_{H} q^2_{S} (\beta - \pi \beta + \alpha \delta))}{a^2_{H} (a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta)^2}
+\small \frac{\partial NECB^*}{\partial a_{H}} = \frac{r_{P} r_{P} (2 a_{H} a_{{p}} q_{S} r_{H} \alpha^2 (-1 + \delta) + a^2_{P} (-1 + \pi) r^2_{H} \alpha^2 \beta (-1 + \delta) + a^2_{H} q^2_{S} (\beta - \pi \beta + \alpha \delta))}{a^2_{H} (a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta)^2}
 $$
 
 Similarly, the equilibrium partial derivative of NECB with respect to _r~H~_ is,
 
 $$
-\frac{\partial NECB^*}{\partial r_{H}} = -\frac{r_{P} (2 a_{H} a_{P} q_{S} r_{H} \alpha^2 (-1 + \delta) + a^2_{P} (-1 + \pi) r^2_{H} \alpha^2 \beta (-1 + \delta) + a^2_{H} q^2_{S} (\beta - \pi \beta + \alpha \delta)}{a_{H} (a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta)^2}
+\small\frac{\partial NECB^*}{\partial r_{H}} = -\frac{r_{P} (2 a_{H} a_{P} q_{S} r_{H} \alpha^2 (-1 + \delta) + a^2_{P} (-1 + \pi) r^2_{H} \alpha^2 \beta (-1 + \delta) + a^2_{H} q^2_{S} (\beta - \pi \beta + \alpha \delta)}{a_{H} (a_{H} q_{S} + a_{P} (-1 + \pi) r_{H} \beta)^2}
 $$
 
 Now we can use these two expressions to calculate the equilibrium values for
@@ -2316,7 +2317,7 @@ In scenario (iii), the partial derivative of equilibrium NECB with respect to
 _a~H~_ is,
 
 $$
-\frac{\partial NECB^*}{\partial a_{H}} = \frac{r_R (a_R^2 q_S r_P^2 \alpha (-\beta + \alpha (-2 + \delta)) (-1 + \delta) + a_H^2 q_S r_R^2 \beta (-\alpha + \beta (-2 + \tau)) (-1 + \tau) - a_R r_P r_R \alpha (-1 + \delta) (a_P r_H \beta (\alpha + \beta) (\pi - \tau) + 2 a_H q_S (\alpha + 2 \beta - \beta \tau)))}{a_P a_R (a_R r_P \alpha (-1 + \delta) + a_H r_R \beta (-1 + \tau))^2}
+\tiny \frac{\partial NECB^*}{\partial a_{H}} = \frac{r_R (a_R^2 q_S r_P^2 \alpha (-\beta + \alpha (-2 + \delta)) (-1 + \delta) + a_H^2 q_S r_R^2 \beta (-\alpha + \beta (-2 + \tau)) (-1 + \tau) - a_R r_P r_R \alpha (-1 + \delta) (a_P r_H \beta (\alpha + \beta) (\pi - \tau) + 2 a_H q_S (\alpha + 2 \beta - \beta \tau)))}{a_P a_R (a_R r_P \alpha (-1 + \delta) + a_H r_R \beta (-1 + \tau))^2}
 $$
 
 And with respect to _r~H~_ is,
@@ -2329,13 +2330,13 @@ As for the predators' parameters, the partial derivative of NECB
 with respect to the predators' uptake rate (_a~R~_) is,
 
 $$
-\frac{\partial NECB^*}{\partial a_{R}} = \frac{r_R (-a_H^3 q_S r_R^2 \beta (-\alpha + \beta (-2 + \tau)) (-1 + \tau) + a_P a_R^2 r_H r_P \alpha^2 \beta (-1 + \delta) (\pi (r_H - r_P) - r_H \tau + r_P (-1 + \delta + \tau)) + a_H^2 r_R (a_P r_H r_R \beta^2 (-1 + \tau) (-\beta + \pi (\alpha + \beta) - \alpha \tau) + 2 a_R q_S r_P \alpha (-1 + \delta) (\alpha + 2 \beta - \beta \tau)) + a_H a_R r_P \alpha (2 a_P r_H r_R \beta (-1 + \delta) (-\beta + \po (\alpha + \beta) - \alpha \tau) + a_R q_S (r_H (\beta + \alpha (-1 + \delta) - \beta \tau) + r_P (-\alpha (-1 + \delta)^2 + \beta (-2 + \delta + \tau)))))}{a_P a_R^2 (a_R r_P \alpha (-1 + \delta) + a_H r_R \beta (-1 + \tau))^2}
+\tiny \frac{\partial NECB^*}{\partial a_{R}} = \frac{r_R (-a_H^3 q_S r_R^2 \beta (-\alpha + \beta (-2 + \tau)) (-1 + \tau) + a_P a_R^2 r_H r_P \alpha^2 \beta (-1 + \delta) (\pi (r_H - r_P) - r_H \tau + r_P (-1 + \delta + \tau)) + a_H^2 r_R (a_P r_H r_R \beta^2 (-1 + \tau) (-\beta + \pi (\alpha + \beta) - \alpha \tau) + 2 a_R q_S r_P \alpha (-1 + \delta) (\alpha + 2 \beta - \beta \tau)) + a_H a_R r_P \alpha (2 a_P r_H r_R \beta (-1 + \delta) (-\beta + \po (\alpha + \beta) - \alpha \tau) + a_R q_S (r_H (\beta + \alpha (-1 + \delta) - \beta \tau) + r_P (-\alpha (-1 + \delta)^2 + \beta (-2 + \delta + \tau)))))}{a_P a_R^2 (a_R r_P \alpha (-1 + \delta) + a_H r_R \beta (-1 + \tau))^2}
 $$
 
 And, with respect to the predators' recycling rate (_r~R~_),
 
 $$
-\frac{\partial NECB^*}{\partial r_{R}} = \frac{-a_P a_R^2 r_H r_P^2 \alpha^2 \beta (-1 + \delta)^2 + a_H^3 q_S r_R^2 \beta (-\alpha + \beta (-2 + \tau)) (-1 + \tau) + a_H a_R r_P \alpha (-1 + \delta) (a_R q_S r_P (-\beta + \alpha (-2 + \delta)) + 2 a_P r_H r_R \beta (\beta - \pi (\alpha + \beta) + \alpha \tau)) + a_H^2 r_R (a_P r_H r_R \beta^2 (-1 + \tau) (\beta - \pi (\alpha + \beta) + \alpha \tau) - 2 a_R q_S r_P \alpha (-1 + \delta) (\alpha + 2 \beta - \beta \tau))}{a_P a_R (a_R r_P \alpha (-1 + \delta) + a_H r_R \beta (-1 + \tau))^2}
+\tiny \frac{\partial NECB^*}{\partial r_{R}} = \frac{-a_P a_R^2 r_H r_P^2 \alpha^2 \beta (-1 + \delta)^2 + a_H^3 q_S r_R^2 \beta (-\alpha + \beta (-2 + \tau)) (-1 + \tau) + a_H a_R r_P \alpha (-1 + \delta) (a_R q_S r_P (-\beta + \alpha (-2 + \delta)) + 2 a_P r_H r_R \beta (\beta - \pi (\alpha + \beta) + \alpha \tau)) + a_H^2 r_R (a_P r_H r_R \beta^2 (-1 + \tau) (\beta - \pi (\alpha + \beta) + \alpha \tau) - 2 a_R q_S r_P \alpha (-1 + \delta) (\alpha + 2 \beta - \beta \tau))}{a_P a_R (a_R r_P \alpha (-1 + \delta) + a_H r_R \beta (-1 + \tau))^2}
 $$
 
 Now we can use these four expressions to calculate the equilibrium values for
@@ -2478,6 +2479,7 @@ ranked_imp_NECBpred <- tibble(NECBgsaPred_imp[, 3]/sum(NECBgsaPred_imp[, 3])) %>
 # Visual deliverables
 
 Here, we build graphs to explore the results of modeling work described above.
+
 <aside>
 All graph-generating code chunks below include a commented-out `ggsave()` function call. Uncomment it to save the graph produced into folder `../Results/`.
 </aside>
@@ -3415,6 +3417,7 @@ present in the ecosystem and how this quantity changes over time. We use the
 equilibrium value of plant stock ($P^*_i$) as our estimate of plant biomass and 
 its partial derivatives with respect to uptake and recycling rates of herbivores
 and predators, respectively. 
+
 <aside>
 Note that below we do not consider scenario (i), where no animals are present in
 the ecosystem
@@ -3468,11 +3471,11 @@ plantBpdah <- EcoFunctPD %>%
 plantBpdah
 ```
 
-The data in \@ref(fig:vd-plant-biomass-pd-ah-sp) are quite spread out, so the next graph
-zooms in on the region around the `y = 0` line. Note that we removed the trend
-line in this next figure because using function `coord_cartesian()` simply zooms
-the plot but does not change the data underlying it, which causes some graphical
-artefacts in the trend line.
+The data in \@ref(fig:vd-scenario-2-plant-biomass-pd-ah-sp) are quite spread out,
+so the next graph zooms in on the region around the `y = 0` line. Note that we 
+removed the trend line in this next figure because using function 
+`coord_cartesian()` simply zooms the plot but does not change the data 
+underlying it, which causes some graphical artefacts in the trend line.
 
 ```{r vd-scenario-2-plant-biomass-pd-ah-zoom, echo=TRUE,tidy=TRUE}
 PlantCPDzoom <- EcoFunctPD %>%
@@ -6041,8 +6044,7 @@ pairedRI <- bind_rows(noherbGSA, herbGSA, predGSA, .id = "Scenario") %>%
 
 ### Carbon and Nitrogen content of trophic compartments
 
-The graphs below (Figures \@ref(fig:vd-gsa-no-herbivore-model-plot),  
-\@ref(fig:vd-gsa-herbivore-model-plot), and \@ref(fig:vd-gsa-predator-model-plot)) 
+The graphs below (Figures \@ref(fig:vd-gsa-no-herbivore-model-plot), \@ref(fig:vd-gsa-herbivore-model-plot), and \@ref(fig:vd-gsa-predator-model-plot)) 
 show the relative importance of each parameter across the three modeling scenarios. 
 
 ```{r vd-gsa-no-herbivore-model-plot, echo=TRUE, tidy=TRUE, fig.height=6, fig.width=6, fig.cap="Relative importance of parameters for each trophic compartment's equilibrium content of N and C in scenario (i), an ecosystem without animals. Parameters on the y-axis are grouped and coloured based on the trophic compartment they refer to."}
@@ -6425,8 +6427,7 @@ and capture as much information as possible in as few visuals as possible.
 
 The next three Figures \@ref(fig:pf-no-herb-params-RI-carbon), 
 \@ref(fig:pf-herb-params-RI-carbon), and \@ref(fig:pf-pred-params-RI-carbon) are 
-re-works of Figures \@ref(fig:vd-gsa-herbivore-model-plot),
-\@ref(fig:vd-gsa-no-herbivore-model-plot), and \@ref(fig:vd-gsa-pred-model-plot), 
+re-works of Figures \@ref(fig:vd-gsa-no-herbivore-model-plot),  \@ref(fig:vd-gsa-herbivore-model-plot), and \@ref(fig:vd-gsa-predator-model-plot), 
 highlighting the parameters that drive the Carbon content of each trophic 
 compartment in the three modeling scenarios, respectively.. 
 
@@ -6823,10 +6824,10 @@ PPbp_pub + PPGSAplot_C3 + plot_layout(widths = c(1,1.3)) + plot_annotation(tag_l
 ```
 
 The following figure shows the change in $\Phi^*_P$ with herbivore uptake 
-rate (top row) and with herbivore recycling rate (bottom row). Insets in each 
+rate (left) and with herbivore recycling rate (right). Insets in each 
 panel zoom in to show the area around `y = 0` in greater detail.
 
-```{r pf--pp-summary-pd-insets, echo=TRUE, tidy=TRUE, message=FALSE, layout="l-body-outset", fig.width=10, fig.height=5, fig.cap = "Change in equilibrium primary productivity with herbivores' uptake (a~H~, **top row**) and recycling (r~H~, **bottom row**) rates. Data points in blue (red) identify instances in which---contrary to expectations---primary productivity increases (decreases) with respect to increasing values of uptake (recycling) rate. Insets show the region around _y = 0_ (dashed black line) for each panel in greater detail. Note the different y-axis scales."}
+```{r pf-pp-summary-pd-insets, echo=TRUE, tidy=TRUE, message=FALSE, layout="l-body-outset", fig.width=10, fig.height=5, fig.cap = "Change in equilibrium primary productivity with herbivores' uptake (a~H~, **left**) and recycling (r~H~, **right**) rates. Data points in blue (red) identify instances in which---contrary to expectations---primary productivity increases (decreases) with respect to increasing values of uptake (recycling) rate. Insets show the region around _y = 0_ (dashed black line) for each panel in greater detail. Note the different y-axis scales."}
 dPPahplot <- dPPah %>%
   filter(., Nutrient == "Carbon") %>%
   ggplot(., aes(x = ah, y = dPP)) +
@@ -6885,18 +6886,9 @@ dPPahInset <- dPPahplot + inset_element(dPPahZoom, 0.15, 0.15, 0.95, 0.75, clip 
 dPPrhInset <- dPPrhplot + inset_element(dPPrhZoom, 0.15, 0.15, 0.95, 0.75, clip = T, ignore_tag = F)
 
 # assemble combined plot
-dPPahInset + dPPrhInset
+# dPPahInset + dPPrhInset
 
 # ggsave(filename = "../Results/dPPvsHerbT_insets.svg", device = "svg", dpi = 300, width = 1.5*height, height = width)
-```
-
-Putting these two figures together as a summary fro Primary Productivity.
-
-```{r pp-summary-bp-rii-pds, echo=TRUE, tidy=TRUE, fig.show='hide'}
-# assemble combined figure
-((PPbp_pub + PPGSAplot_C2) / (dPPahInset + dPPrhInset)) + plot_layout(guides = "collect") + plot_annotation(tag_levels = "a", tag_prefix = "(", tag_suffix = ")") 
-
-# ggsave(filename = "../Results/PPsummary.svg", device = "svg", dpi = 300, width = 1.15*width, height = width)
 ```
 
 ### Net Ecosystem Carbon Balance
