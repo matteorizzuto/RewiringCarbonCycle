@@ -6790,7 +6790,7 @@ PPbp <- PrimProd %>%
 PPbp_pub <- PPbp + scale_y_continuous(
     trans = "log10",
     breaks = function(x) {
-      brks <- scales::extended_breaks(Q = c(0.1, 5))(log10(x))
+      brks <- scales::extended_breaks(Q = c(0.01, 100))(log10(x))
       10^(brks[brks %% 1 == 0])
     },
     labels = scales::math_format(format = log10)
