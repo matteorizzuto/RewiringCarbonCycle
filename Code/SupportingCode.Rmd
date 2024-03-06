@@ -1720,12 +1720,12 @@ PrimProd <- randomI %>%
          PP = ifelse(herbivore == "absent",
                      (q*rp)/(ap*α-ap*α*δ),
                      ifelse(herbivore == "herbivore",
-                            (ap*(rh^2)*rp*(α+(-1+π)*β-α*δ))/(ah*(ah*q+ap*(-1+π)*rh*δ)),
+                            (ap*(rh^2)*rp*(α+(-1+π)*β-α*δ))/(ah*(ah*q+ap*(-1+π)*rh*β)),
                             -(((ar*rp+ah*rr)*(ar*q*rp+ah*q*rr+ap*rh*rr*β*(π-τ)))/(ap*ar*(ar*rp*α*(-1+δ)+ah*rr*β*(-1+τ)))))),
          PPc = ifelse(herbivore == "absent",
                       (q*rp)/(ap-ap*δ),
                       ifelse(herbivore == "herbivore",
-                             (ap*rh^2*rp*α*(α+(-1+π)*β-α*δ))/(ah*(ah*q+ap*(-1+π)*rh*δ)),
+                             (ap*rh^2*rp*α*(α+(-1+π)*β-α*δ))/(ah*(ah*q+ap*(-1+π)*rh*β)),
                       -(((ar*rp+ah*rr)*α*(ar*q*rp+ah*q*rr+ap*rh*rr*β*(π-τ)))/(ap*ar*(ar*rp*α*(-1+δ)+ah*rr*β*(-1+τ)))))),
          herbivore = as_factor(herbivore))
 
