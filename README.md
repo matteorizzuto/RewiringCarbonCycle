@@ -7,7 +7,7 @@ This repository contains the following items:
 * in folder _Code_,
   - CarbonModelAnalysis.nb, this is the Wolfram Mathematica notebook we used to solve the model analytically, and to find the model's equilibria and expressions for the ecosystem processes of interest, which are used in the SupportingCode.Rmd R notebook in this folder. This file is also available in text format (.txt).
 
-  - SupportingCode.Rmd, this is the R notebook where we numerically analyze our model, as described in the manuscript. It contains code to reproduce all figures in the manuscript. A compiled version of this file is provided as an HTML file.
+  - SupportingCode.Rmd, this is the R notebook where we numerically analyze our model, as described in the manuscript. It contains code to reproduce all figures in the manuscript.
 
   - Bibliography.bib, a bibtex file containing the references cited in the R markdown notebook.
 
