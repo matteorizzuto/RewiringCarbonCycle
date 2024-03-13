@@ -203,9 +203,9 @@ In[48]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],
 FullSimplify[D[-((rh rp (ah q+ap rh \[Alpha] (-1+\[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta]))),rh]]
 Out[49]= -((rp (ah^2 q^2+2 ah ap q rh \[Alpha] (-1+\[Delta])+ap^2 (-1+p) rh^2 \[Alpha] \[Beta] (-1+\[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta])^2))
 Now, I calculate it for the C - side,
-In[50]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
-FullSimplify[\[Alpha]*ap*rh/ah*J/k*(k*rh*rp*(\[Alpha]+(-1+p)*\[Beta]-\[Alpha]*\[Delta]))/(ah*J*q+ap*J*(-1+p)*rh*\[Beta])+\[Beta]*ah*rh/ah*-((rp*(ah*q+ap*rh*\[Alpha]*(-1+\[Delta])))/(ah*(ah*q+ap*(-1+p)*rh*\[Beta])))+\[Beta]*rh*-((rp*(ah*q+ap*rh*\[Alpha]*(-1+\[Delta])))/(ah*(ah*q+ap*(-1+p)*rh*\[Beta])))+\[Alpha]*rp*rh/ah-2*\[Alpha]*\[Delta]*rp*rh/ah-q*J/k*(k*rh*rp*(\[Alpha]+(-1+p)*\[Beta]-\[Alpha]*\[Delta]))/(ah*J*q+ap*J*(-1+p)*rh*\[Beta])]
-Out[51]= -((rh rp (ap rh \[Alpha] (\[Alpha]+2 p \[Beta]) (-1+\[Delta])+ah q (\[Beta]+p \[Beta]+\[Alpha] \[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta])))
+In[9]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
+FullSimplify[\[Alpha]*ap*rh/ah*J/k*(k*rh*rp*(\[Alpha]+(-1+p)*\[Beta]-\[Alpha]*\[Delta]))/(ah*J*q+ap*J*(-1+p)*rh*\[Beta])+\[Beta]*ah*rh/ah*-((rp*(ah*q+ap*rh*\[Alpha]*(-1+\[Delta])))/(ah*(ah*q+ap*(-1+p)*rh*\[Beta])))+\[Beta]*rh*-((rp*(ah*q+ap*rh*\[Alpha]*(-1+\[Delta])))/(ah*(ah*q+ap*(-1+p)*rh*\[Beta])))+\[Alpha]*rp*rh/ah-2*\[Alpha]*\[Delta]*rp*rh/ah-2*\[Beta]*p*rh*-((rp*(ah*q+ap*rh*\[Alpha]*(-1+\[Delta])))/(ah*(ah*q+ap*(-1+p)*rh*\[Beta])))-q*J/k*(k*rh*rp*(\[Alpha]+(-1+p)*\[Beta]-\[Alpha]*\[Delta]))/(ah*J*q+ap*J*(-1+p)*rh*\[Beta])]
+Out[10]= -((rh rp (ap rh \[Alpha]^2 (-1+\[Delta])+ah q (\[Beta]-p \[Beta]+\[Alpha] \[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta])))
 In[52]:= ClearAll[J,k,Sn,Sc,Pn,Pc,Hn,Hc,rp,rh,q,ap,ah,\[Alpha],\[Beta],\[Delta],p];
 FullSimplify[D[-((rh rp (ap rh \[Alpha] (\[Alpha]+2 p \[Beta]) (-1+\[Delta])+ah q (\[Beta]+p \[Beta]+\[Alpha] \[Delta])))/(ah (ah q+ap (-1+p) rh \[Beta]))),ah]]
 Out[53]= (rh rp (2 ah ap q rh \[Alpha] (\[Alpha]+2 p \[Beta]) (-1+\[Delta])+ap^2 (-1+p) rh^2 \[Alpha] \[Beta] (\[Alpha]+2 p \[Beta]) (-1+\[Delta])+ah^2 q^2 (\[Beta]+p \[Beta]+\[Alpha] \[Delta])))/(ah^2 (ah q+ap (-1+p) rh \[Beta])^2)
